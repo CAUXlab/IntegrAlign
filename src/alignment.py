@@ -31,7 +31,7 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
     # print(panels_all)
     output_path = downscaled_images["params"].get("output_path")
     turn_img_id_dict = downscaled_images["params"].get("turn_img_id_dict")
-    
+
     ## Remove "params" from downscaled_images
     downscaled_images = remove_params(downscaled_images)
     ## Create alignment folder to store alignment reports
@@ -54,18 +54,17 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
         img_resize_alignment = {}
         outTx_Rigid_alignment = {}
         outTx_Bspline_alignment = {}
-        outTx_Bspline_inverse_alignment = {}
         artefacts_empty_alignment = {}
         analysis_area_alignment = {}
         for name_alignment, downscaled_images_id_name_alignment in downscaled_images_id.items():
             print("-----")
-            print(f"Alignment {name_alignment}...")
             ## Load downscaled images
             print("Loading downscaled images...")
             panels_alignment = name_alignment.split("_")
             metadata_images, img1, img2, img1_resize, img2_resize = extract_downscaled_images(downscaled_images_id_name_alignment, panels_alignment, 
                                                                                               name_alignment, turn_img_id_dict, metadata_images, id)
             ## Alignment
+            print(f"Alignment {name_alignment}...")
             spline_order = 3
             (outTx_Bspline_dict, simg2_dict, execution_time_dict, 
              metric_values_dict, outTx_Rigid, simg1_Rigid, 
@@ -78,8 +77,8 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
                 coordinate_table = coordinate_tables[index]
                 annotations = annotations_tables[index]
                 # Get the file path corresponding to id
-                csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv")), None)
-                geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson")), None)
+                csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
+                geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
                 ## Get the coordinates table and annotations
                 cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
                 artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
@@ -97,7 +96,7 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
         
         
         ## Transform and filter coordinates
-        print("Transform, filer and merge coordinates...")
+        print("Transform, filter and merge coordinates...")
         merged_cell_coordinates = pd.DataFrame()
         for name_alignment in downscaled_images_id.keys():
             panels_alignment = name_alignment.split("_")
@@ -366,10 +365,10 @@ def get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysi
         except json.JSONDecodeError:
             return {}  # Return an empty dictionary for invalid rows
     gdf['classification'] = gdf['classification'].apply(safe_json_load)
+    '''
     # print(gdf['classification'].apply(lambda x: x.get('name')).unique())
     ## Convert LineString to Polygon
-    gdf_poly = gdf['geometry'].apply(lambda geom: Polygon(geom))
-    '''
+    gdf_poly = gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
     fig, ax = plt.subplots(figsize=(6, 6)) 
     gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
     ax.axis('off')
@@ -381,7 +380,7 @@ def get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysi
     artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in Annotations_classification])]
     # print(artefacts_empty_gdf['classification'].apply(lambda x: x.get('name')).unique())
     ## Convert LineString to Polygon
-    artefacts_empty_gdf_poly = artefacts_empty_gdf['geometry'].apply(lambda geom: Polygon(geom))
+    artefacts_empty_gdf_poly = artefacts_empty_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
     '''
     fig, ax = plt.subplots(figsize=(6, 6)) 
     artefacts_empty_gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
@@ -395,7 +394,7 @@ def get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysi
     analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name') in ['Analysis_area'])]
     analysis_area_gdf['classification'].apply(lambda x: x.get('name')).unique()
     # Convert LineString to Polygon
-    analysis_area_gdf_poly = analysis_area_gdf['geometry'].apply(lambda geom: Polygon(geom))
+    analysis_area_gdf_poly = analysis_area_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
     '''
     fig, ax = plt.subplots(figsize=(6, 6)) 
     analysis_area_gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
@@ -523,42 +522,19 @@ def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_imag
     plt.axis('off')
 
     fig, axs = plt.subplots(2, len(outTx_Bspline_dict), figsize=(len(outTx_Bspline_dict) * 6, 12))
+    # Ensure axs is always a 2D array
+    if len(outTx_Bspline_dict) == 1:
+        axs = axs.reshape(2, 1)
+    print('test')
+    
 
     for i, (metric_ms, outTx_Bspline) in enumerate(outTx_Bspline_dict.items()):
         simg2 = sitk.GetArrayFromImage(simg2_dict[metric_ms])
         transformDomainMeshSize = [int(metric_ms.split('_')[1]), int(metric_ms.split('_')[1])]
 
-        array_contour, xx, yy, u, v, jacobian_det_np_arr, array = grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_Bspline)
-
-        # Plot moving image and grid
-        axs[0, i].imshow(simg2, cmap='Reds')
-        axs[0, i].imshow(array_contour, alpha=0.3, cmap='Reds_r')
-        axs[0, i].quiver(xx, yy, -u, -v, color='black', units='xy', angles='xy', scale_units='xy', scale=1, width=10)
-        axs[0, i].scatter(xx, yy, s=1)
-        axs[0, i].axis('off')
-
-        # Plot Jacobian determinant map
-        colors = [
-            [0.0, '#2390ff'],  # Red
-            [0.25, '#09537d'],
-            [0.5, '#000000'],  # Black
-            [0.75, '#ca4f04'],
-            [1.0, '#ff1b37'],  # Blue
-        ]
-        custom_cmap = LinearSegmentedColormap.from_list('custom_cmap', colors)
-        jacobian_det_np_arr = np.nan_to_num(jacobian_det_np_arr, nan=1.0, posinf=1.5, neginf=0.5)
-        im = axs[1, i].imshow(jacobian_det_np_arr, cmap=custom_cmap, vmin=0.5, vmax=1.5)
-        cbar = plt.colorbar(im, ax=axs[1, i], orientation='vertical', label='det(Jac)')
-        axs[1, i].imshow(array_contour, alpha=0.2, cmap='gray')
-        if thresh_pixelSIMG2:
-            simg2_tr = np.clip((simg2 >= thresh_pixelSIMG2) * 255, 0, 255)
-            axs[1, i].imshow(simg2_tr, cmap='gray', alpha=0.4)
-        else:
-            axs[1, i].imshow(simg2, cmap='gray', alpha=0.4)
-        axs[1, i].axis('off')
+        axs = grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_Bspline, i, axs, thresh_pixelSIMG2, simg2_tr)
 
     plt.tight_layout()
-
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=300)
     buffer.seek(0)
@@ -625,7 +601,12 @@ def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_imag
     buffer.close()
     plt.close()
 
-    with open(output_path + f"Alignment/reports/{id}_{name_alignment}_report_alignment.html", 'w') as file:
+    if len(outTx_Bspline_dict) == 1:
+        file_name = output_path + f"Alignment/reports/{id}_{name_alignment}_report_alignment_refined.html"
+    else:
+        file_name = output_path + f"Alignment/reports/{id}_{name_alignment}_report_alignment.html"
+
+    with open(file_name, 'w') as file:
         file.write("""
         <html>
         <head>
@@ -684,11 +665,8 @@ def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_imag
     return outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment
 
 
-
-def grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_Bspline):
-    ## Visualization of the b-spline deformation
-    # Create grid to visualize the deformation in the image space
-    grid_spacing = simg2.shape[1]/20, simg2.shape[0]/20
+def grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_Bspline, i, axs, thresh_pixelSIMG2, simg2_tr):
+    grid_spacing = simg2.shape[1] / 20, simg2.shape[0] / 20
     grid = sitk.GridSource(
         outputPixelType=sitk.sitkFloat32,
         size=(simg2.shape[1], simg2.shape[0]),
@@ -697,17 +675,14 @@ def grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_
         gridOffset=(0, 0),
         spacing=(1, 1),
     )
+
     array = sitk.GetArrayViewFromImage(grid)
-    
-    # get mesh_size and number of control points
     mesh_size = np.array(transformDomainMeshSize)
     ctrl_pts = np.array(mesh_size) + spline_order
-    
-    # transform grid with outTx_Bspline parameters
+
     transform = sitk.BSplineTransformInitializer(grid, mesh_size.tolist(), spline_order)
     transform.SetParameters(outTx_Bspline.GetParameters())
-    
-    # Create array with the contour of the deformation
+
     resampler = sitk.ResampleImageFilter()
     resampler.SetReferenceImage(grid)
     resampler.SetTransform(transform)
@@ -715,39 +690,58 @@ def grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_
     resampler.SetDefaultPixelValue(100)
     resampler.SetOutputPixelType(sitk.sitkFloat32)
     resampled = resampler.Execute(grid)
+
     array_contour = sitk.GetArrayViewFromImage(resampled)
-    
-    # Visualize control points
+
+    #
     x_coeff, y_coeff = outTx_Bspline.GetCoefficientImages()
     grid_origin = x_coeff.GetOrigin()
     grid_spacing = x_coeff.GetSpacing()
-    
     x = np.linspace(grid_origin[0], grid_origin[0] + (ctrl_pts[0] - 1) * grid_spacing[0], ctrl_pts[0])
     y = np.linspace(grid_origin[1], grid_origin[1] + (ctrl_pts[1] - 1) * grid_spacing[1], ctrl_pts[1])
     xx, yy = np.meshgrid(x, y)
-    
-    # Visualize transform on control points
+
     uv = np.reshape(np.array(transform.GetParameters()), (ctrl_pts[0], ctrl_pts[1], 2), order='F')
     u, v = uv[..., 0].T, uv[..., 1].T
-    # Transpose y_values to make sure it has the same shape as x_values
-    y_values = yy-v
-    x_values = xx-u
+    y_values = yy - v
+    x_values = xx - u
     result_array = np.dstack((x_values, y_values))
 
-
-    # Compute displacment field
-    displacement_field = sitk.TransformToDisplacementField(transform,
-                                      sitk.sitkVectorFloat64,
-                                      grid.GetSize(),
-                                      grid.GetOrigin(),
-                                      grid.GetSpacing(),
-                                      grid.GetDirection())
+    displacement_field = sitk.TransformToDisplacementField(transform, sitk.sitkVectorFloat64,
+                                                           grid.GetSize(), grid.GetOrigin(),
+                                                           grid.GetSpacing(), grid.GetDirection())
     displacement_field_np_arr = sitk.GetArrayViewFromImage(displacement_field)
-    # Compute the jacobian determinant volume
     jacobian_det_volume = sitk.DisplacementFieldJacobianDeterminant(displacement_field)
     jacobian_det_np_arr = sitk.GetArrayViewFromImage(jacobian_det_volume)
-    
-    return array_contour, xx, yy, u, v, jacobian_det_np_arr, array
+
+    ## Plot
+    axs[0, i].imshow(simg2, cmap='Reds')
+    axs[0, i].imshow(array_contour, alpha=0.3, cmap='Reds_r')
+    axs[0, i].quiver(xx, yy, -u, -v, color='black', units='xy', angles='xy', scale_units='xy', scale=1, width=10)
+    axs[0, i].scatter(xx, yy, s=1)
+    axs[0, i].axis('off')
+
+    # Plot Jacobian determinant map
+    colors = [
+        [0.0, '#2390ff'],  # Red
+        [0.25, '#09537d'],
+        [0.5, '#000000'],  # Black
+        [0.75, '#ca4f04'],
+        [1.0, '#ff1b37'],  # Blue
+    ]
+    custom_cmap = LinearSegmentedColormap.from_list('custom_cmap', colors)
+    jacobian_det_np_arr = np.nan_to_num(jacobian_det_np_arr, nan=1.0, posinf=1.5, neginf=0.5)
+    im = axs[1, i].imshow(jacobian_det_np_arr, cmap=custom_cmap, vmin=0.5, vmax=1.5)
+    cbar = plt.colorbar(im, ax=axs[1, i], orientation='vertical', label='det(Jac)')
+    axs[1, i].imshow(array_contour, alpha=0.2, cmap='gray')
+    if thresh_pixelSIMG2:
+        simg2_tr = np.clip((simg2 >= thresh_pixelSIMG2) * 255, 0, 255)
+        axs[1, i].imshow(simg2_tr, cmap='gray', alpha=0.4)
+    else:
+        axs[1, i].imshow(simg2, cmap='gray', alpha=0.4)
+    axs[1, i].axis('off')
+
+    return axs
 
 
 def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2):
@@ -889,11 +883,10 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
             image_shape2 = metadata_images[name_alignment][f'image_shape_{reference_panel}']
             operation2 = metadata_images[name_alignment][f'turn_img_{reference_panel}']
             img_resize2 = img_resize_alignment[reference_panel]
-            metric_ms = metric_ms_alignment[panel]
             outTx_Rigid = outTx_Rigid_alignment[panel]
             outTx_Bspline = outTx_Bspline_alignment[panel]
-            artefacts_empty_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(artefacts_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, metric_ms, outTx_Rigid, outTx_Bspline, img_resize2)
-            analysis_area_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(analysis_area_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, metric_ms, outTx_Rigid, outTx_Bspline, img_resize2)
+            artefacts_empty_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(artefacts_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img_resize2)
+            analysis_area_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(analysis_area_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img_resize2)
 
 
     ## Fix invalid geometries in artefacts and empty annotations
@@ -904,7 +897,15 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     for panel in panels_tr:
         analysis_area_alignment_list.append(analysis_area_alignment[panel].apply(lambda geom: geom if geom.is_valid else geom.buffer(0)))
         artefacts_empty_alignment_list.append(artefacts_empty_alignment[panel].apply(lambda geom: geom if geom.is_valid else geom.buffer(0)))
-
+    '''
+    fig, ax = plt.subplots(figsize=(6, 6)) 
+    analysis_area_alignment_list[0].plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+    analysis_area_alignment_list[1].plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+    analysis_area_alignment_list[2].plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+    ax.axis('off')
+    ax.invert_yaxis()
+    plt.show()
+    '''
     ## Filter out empty GeoSeries
     analysis_area_alignment_list = [g for g in analysis_area_alignment_list if not g.empty]
     artefacts_empty_alignment_list = [g for g in artefacts_empty_alignment_list if not g.empty]
@@ -995,8 +996,7 @@ def scale_gdf(gdf, scale_percent, operation, image_shape, img_resize, c = "R"):
 
 
 
-def transform_annotation(annotations, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, metric_ms, outTx_Rigid, outTx_Bspline, img_resize):
-    # print(metric_ms)
+def transform_annotation(annotations, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img_resize):
     
     # Transform Shapes from IF2 to IF3 coordinate system
     annotation_TR= []

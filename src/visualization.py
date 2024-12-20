@@ -5,16 +5,16 @@ from tqdm import tqdm # type: ignore
 from tifffile import TiffFile # type: ignore
 import cv2 # type: ignore
 
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # type: ignore
 from io import BytesIO
 import base64
 import json
 
-def visualization(folder_paths, panels, output_path):
+def visualization(scans_paths, panels, output_path):
     """Generate a visualization report of all the slides for each patients."""
     ## Get the ids of every patients
     ids_panels = []
-    for folder_scan, panel in zip(folder_paths, panels):
+    for folder_scan, panel in zip(scans_paths, panels):
         ids = find_ids(folder_scan)
         # print(f"There is {len(ids)} patients in the panel {panel}")
         ids_panels.append(ids)
@@ -27,12 +27,12 @@ def visualization(folder_paths, panels, output_path):
     ## Save the report with the compressed images of every common ids
     figs = []
     for id in tqdm(sorted_common_ids, desc="Processing images", unit="ID"):
-        fig = plot_panels(folder_paths, id, panels)  # Generate figure
+        fig = plot_panels(scans_paths, id, panels)  # Generate figure
         figs.append(fig)
     save_html_report(figs, sorted_common_ids, output_path + "images_report.html")
 
     ## Save parameters for next steps
-    dict_params = {"folder_paths":folder_paths, "common_ids":sorted_common_ids, "panels":panels, "output_path":output_path}
+    dict_params = {"folder_paths":scans_paths, "common_ids":sorted_common_ids, "panels":panels, "output_path":output_path}
     params_json = json.dumps(dict_params,indent=4)
     with open(output_path + "params.json","w") as outfile:
         outfile.write(params_json)
@@ -40,14 +40,15 @@ def visualization(folder_paths, panels, output_path):
 
 
 def find_ids(folder_path):
-    id_regex = re.compile(r'^(\d+)')
+    # id_regex = re.compile(r'^(\d+)')
+    id_regex = re.compile(r'^[^_]+')
     
     ids = []
     for filename in os.listdir(folder_path):
-        if filename.endswith('.unmixed.qptiff'):
+        if filename.endswith('.qptiff'):
             match = id_regex.match(filename)
             if match:
-                ids.append(match.group(1))
+                ids.append(match.group())
     
     return ids
 
@@ -59,7 +60,7 @@ def plot_panels(folder_paths, id, panels):
     ## Get all compressed images
     for folder, panel in zip(folder_paths, panels):
         # Define scan path
-        path = folder + id + f"_panel_{panel}.unmixed.qptiff"
+        path = next((os.path.join(folder, f) for f in os.listdir(folder) if id in f and f.endswith(".qptiff")), None)
         # print(f"{panel}:", path)
         # Load image
         diff_index_pages = 10
