@@ -172,7 +172,7 @@ We also have huge deformation inside the tissue for most of mesh sizes (here mes
 
 Indeed when we visualize the images in higher resolution with the mirrored cursor we can observe that the TLS tissue exhibits irregular tearing throughout, which is inconsistent with the tearing seen in the DC panel. This make the TLS panel impossible to align with the DC panel in our case since the tissue structure is completly different. 
 
-This explains why serial slides must be cut in a consistent manner in order to have the same tissue structure.
+This explains the importance of serial slides being cut in a consistent manner in order to have the same tissue structure.
 
 ## Exiting the virtual environment
 When you are done, you can deactivate the virtual environment by simply running:
