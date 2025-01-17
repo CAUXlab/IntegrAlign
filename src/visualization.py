@@ -9,8 +9,11 @@ import matplotlib.pyplot as plt # type: ignore
 from io import BytesIO
 import base64
 import json
+import numpy as np
 
-def visualization(scans_paths, panels, output_path):
+from src.alignment import get_annotations, get_gdf
+
+def visualization(scans_paths, annotations, panels, output_path):
     """Generate a visualization report of all the slides for each patients."""
     ## Get the ids of every patients
     ids_panels = []
@@ -27,7 +30,7 @@ def visualization(scans_paths, panels, output_path):
     ## Save the report with the compressed images of every common ids
     figs = []
     for id in tqdm(sorted_common_ids, desc="Processing images", unit="ID"):
-        fig = plot_panels(scans_paths, id, panels)  # Generate figure
+        fig = plot_panels(scans_paths, annotations, id, panels)  # Generate figure
         figs.append(fig)
     save_html_report(figs, sorted_common_ids, output_path + "images_report.html")
 
@@ -53,31 +56,65 @@ def find_ids(folder_path):
     return ids
 
 
-def plot_panels(folder_paths, id, panels):
+def plot_panels(scans_paths, annotations_paths, id, panels):
     # print("------------------------")
     # print("Patient ", id)
     imgs_resized = []
-    ## Get all compressed images
-    for folder, panel in zip(folder_paths, panels):
-        # Define scan path
-        path = next((os.path.join(folder, f) for f in os.listdir(folder) if id in f and f.endswith(".qptiff")), None)
-        # print(f"{panel}:", path)
-        # Load image
-        diff_index_pages = 10
-        img_resized = load_compressed_img(path, diff_index_pages)
-        # Scale images to 8bit
-        img_resized = cv2.convertScaleAbs(img_resized)
+    annotations_resized = []
+    if annotations_paths:
+        ## Get all compressed images and annotations
+        for scan, annotations, panel in zip(scans_paths, annotations_paths, panels):
+            # Define scan path
+            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(".qptiff")), None)
+            # print(f"{panel}:", path)
+            # Load image
+            diff_index_pages = 10
+            img_resized, scale_percent = load_compressed_img(path, diff_index_pages)
+            # Scale images to 8bit
+            img_resized = cv2.convertScaleAbs(img_resized)
+            imgs_resized.append(img_resized)
 
-        imgs_resized.append(img_resized)
+            # Get annotations
+            artefacts_empty_alignment = {}
+            analysis_area_alignment = {}
+            geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+            artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
 
-    ## Plot the compressed images
-    fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
-    for i, (img_resized, panel) in enumerate(zip(imgs_resized, panels)):
-        axes[i].imshow(img_resized, cmap="gray")
-        axes[i].set_title(panel, fontsize=6)
-        axes[i].axis('off')
-    plt.tight_layout()
-    plt.close(fig)
+            analysis_area_gdf_poly = analysis_area_alignment[panel]
+            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, operation = 0, image_shape = img_resized.shape)
+            annotations_resized.append([area * scale_percent for area in analysis_area_array])
+        ## Plot the compressed images
+        fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
+        for i, (img_resized, panel, annotations) in enumerate(zip(imgs_resized, panels, annotations_resized)):
+            axes[i].imshow(img_resized, cmap="gray")  # Display the image
+            axes[i].set_title(panel, fontsize=6)  # Set panel title
+            axes[i].axis('off')  # Turn off axes
+            # Plot the annotations
+            for annotation_array in annotations:
+                axes[i].plot(annotation_array[:, 0], annotation_array[:, 1], color='red', linewidth=0.5)
+        plt.tight_layout()
+        plt.close(fig)
+    else:
+        ## Get all compressed images
+        for scan, panel in zip(scans_paths, panels):
+            # Define scan path
+            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(".qptiff")), None)
+            # print(f"{panel}:", path)
+            # Load image
+            diff_index_pages = 10
+            img_resized, scale_percent = load_compressed_img(path, diff_index_pages)
+            # Scale images to 8bit
+            img_resized = cv2.convertScaleAbs(img_resized)
+
+            imgs_resized.append(img_resized)
+            ## Plot the compressed images
+        fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
+        for i, (img_resized, panel) in enumerate(zip(imgs_resized, panels)):
+            axes[i].imshow(img_resized, cmap="gray")
+            axes[i].set_title(panel, fontsize=6)
+            axes[i].axis('off')
+        plt.tight_layout()
+        plt.close(fig)
     
     return fig
 
@@ -116,5 +153,11 @@ def load_compressed_img(path_qptiff, diff_index_pages):
     # Load the most compressed DAPI image in .pages
     most_comp_DAPI_index = len(tif.pages) - diff_index_pages
     img_resized = tif.pages[most_comp_DAPI_index].asarray()
+
+    tif_tags= {}
+    for tag in tif.pages[0].tags.values():
+        name, value = tag.name, tag.value
+        tif_tags[name] = value
+    scale_percent = img_resized.shape[0] / tif_tags['ImageLength']
     
-    return img_resized
+    return img_resized, scale_percent

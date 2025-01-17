@@ -10,6 +10,8 @@ def parse_arguments():
     preprocess_parser = subparsers.add_parser("visualize", help="Generate visualization report of the scans")
     preprocess_parser.add_argument('--scans', nargs='+', required=True,
                                     help="Paths to 2 or 3 panel folders of the scans (.qptiff). Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels.")
+    preprocess_parser.add_argument('--annotations', nargs='+', default=None,
+                                    help="Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.")
     preprocess_parser.add_argument('--panels', nargs='+', required=True,
                                     help="List of the panel names. Keep the same order as folders.")
     preprocess_parser.add_argument('--output', required=True, help="Path to save the preprocessing report")
@@ -58,7 +60,7 @@ def parse_arguments():
                                         "Options: '0' (no visualization, default), '1' (visualize the first alignment), "
                                         "'2' (visualize the second alignment), 'all' (visualize all alignments)."))
     finetuning_parser.add_argument('--scans', nargs='+',
-                                    help="Paths to 2 or 3 panel folders of the scans (.qptiff) that are stored in local. THE FILES SHOULD BE THE SAME AS THE ONES USED IN THE BATCH ALIGNMENT BUT CAN BE IN ANOTHER PLACE, if you want to do an alignment with new slides relaunch the full pipeline (with batch alignement) so it uses the new downscaled slides (need to verify the rotation of the slide). Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels.")
+                                    help="Paths to 2 or 3 panel folders of the scans (.qptiff). THE FILES SHOULD BE THE SAME AS THE ONES USED IN THE BATCH ALIGNMENT BUT CAN BE IN ANOTHER PLACE, if you want to do an alignment with new slides relaunch the full pipeline (with batch alignement) so it uses the new downscaled slides (need to verify the rotation of the slide). Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels.")
     finetuning_parser.add_argument('--resolution', type=float, default=2.012948251135, 
                                     help="Resolution in µm (optional). Value by default : 2.012948251135")
     finetuning_parser.add_argument('--metric', type=str, default="Correlation", 

@@ -93,7 +93,11 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
         print("Merging the annotations...")    
         mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
                           img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
-        
+        # If the intersection of the analysis area is empty
+        # Doesn't save merge coordinates, tables or plots
+        # Continue to the next iteration
+        if mask is None:
+            continue  # Skip to the next iteration
         
         ## Transform and filter coordinates
         print("Transform, filter and merge coordinates...")
@@ -327,8 +331,8 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
     new_df = pd.DataFrame()
     # Compute the center coordinates and store them in the new DataFrame
     ## Convert pixel coordinates to micrometers
-    new_df['x (µm)'] = df['x']
-    new_df['y (µm)'] = df['y']
+    new_df['x (micron)'] = df['x']
+    new_df['y (micron)'] = df['y']
 
     new_df['x'] = df['x'] * resolution_micron
     new_df['y'] = df['y'] * resolution_micron
@@ -360,10 +364,15 @@ def get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysi
     ## Read annotations file
     gdf = gpd.read_file(geojson_file_path)
     def safe_json_load(x):
-        try:
-            return json.loads(x)
-        except json.JSONDecodeError:
-            return {}  # Return an empty dictionary for invalid rows
+        if isinstance(x, dict):  # If it's already a dictionary, return it as is
+            return x
+        elif isinstance(x, str):  # If it's a string, try to parse it as JSON
+            try:
+                return json.loads(x)
+            except json.JSONDecodeError:
+                return {}  # Return an empty dictionary for invalid rows
+        else:  # If it's neither, return an empty dictionary
+            return {}
     gdf['classification'] = gdf['classification'].apply(safe_json_load)
     '''
     # print(gdf['classification'].apply(lambda x: x.get('name')).unique())
@@ -525,7 +534,6 @@ def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_imag
     # Ensure axs is always a 2D array
     if len(outTx_Bspline_dict) == 1:
         axs = axs.reshape(2, 1)
-    print('test')
     
 
     for i, (metric_ms, outTx_Bspline) in enumerate(outTx_Bspline_dict.items()):
@@ -876,8 +884,8 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
             operation1 = metadata_images[name_alignment][f'turn_img_{panel}']
             img_resize1 = img_resize_alignment[panel]
             ## Scale annotations to downscaled image resolution
-            artefacts_empty_array = scale_gdf(artefacts_empty_gdf_poly, scale_percent1, operation1, image_shape1, img_resize1, c="B")
-            analysis_area_array = scale_gdf(analysis_area_gdf_poly, scale_percent1, operation1, image_shape1, img_resize1, c="B")
+            artefacts_empty_array = get_gdf(artefacts_empty_gdf_poly, scale_percent1, operation1, image_shape1, img_resize1, c="B")
+            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent1, operation1, image_shape1, img_resize1, c="B")
             ## Transform scaled annotations to downscaled reference image
             scale_percent2 = metadata_images[name_alignment][f'scale_percent_{reference_panel}']
             image_shape2 = metadata_images[name_alignment][f'image_shape_{reference_panel}']
@@ -918,6 +926,12 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
         intersections = intersect_polygon_lists(intersections, analysis_area_alignment_list[2])
     # Convert final intersections to GeoSeries
     intersections_polygons = gpd.GeoSeries(intersections)
+
+    # Check if intersections_polygons is empty
+    if intersections_polygons.empty:
+        print("No intersections found between the analysis areas of each panel. One of the alignment might be suboptimal.")
+        return None  # Indicate that this iteration should be skipped
+
     '''
     fig, ax = plt.subplots(figsize=(6, 6)) 
     intersections_polygons.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
@@ -944,7 +958,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     mask = outer_boundary.difference(inner_boundary)
     
     # Plot the MultiPolygon
-    # plot_multipolygon(scaled_mask)
+    # plot_multipolygon(mask)
     
     ## Convert mask to micro meters
     scaled_mask = scale_multipolygon_coordinates(mask, resolution_micron)
@@ -956,7 +970,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
 
 
 
-def scale_gdf(gdf, scale_percent, operation, image_shape, img_resize, c = "R"):
+def get_gdf(gdf, scale_percent, operation, image_shape, img_resize = None, c = "R"):
     annotation = []
     for geometry in gdf.geometry:
         if geometry.geom_type == 'Polygon':
@@ -1162,8 +1176,8 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     df_cells = data_frame_cells[f'{panels_alignment[0]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
     filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
-    filtered_df[['x (µm)', 'y (µm)']] = filtered_coords_tr / resolution_micron
-    filtered_df = filtered_df[['x (µm)', 'y (µm)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
+    filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
+    filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
     filtered_df
 
     filtered_df['Panel'] = panels_alignment[0]
@@ -1204,8 +1218,8 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     df_cells = data_frame_cells[f'{panels_alignment[1]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
     filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
-    filtered_df[['x (µm)', 'y (µm)']] = filtered_coords / 2.01294825
-    filtered_df = filtered_df[['x (µm)', 'y (µm)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
+    filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / 2.01294825
+    filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
     filtered_df
 
     filtered_df['Panel'] = panels_alignment[1]
@@ -1227,9 +1241,9 @@ def save_tables(merged_cell_coordinates, output_path, id):
 
 def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pixel_size_raster_micron, output_path, panels_all, id, resolution_micron):
     ## Plot the raster before alignment
-    coords1 = data_frame_cells[f'{panels_all[0]}_panel_df'][["x (µm)", "y (µm)"]].to_numpy()
-    coords2 = data_frame_cells[f'{panels_all[1]}_panel_df'][["x (µm)", "y (µm)"]].to_numpy()
-    coords3 = data_frame_cells[f'{panels_all[2]}_panel_df'][["x (µm)", "y (µm)"]].to_numpy()
+    coords1 = data_frame_cells[f'{panels_all[0]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+    coords2 = data_frame_cells[f'{panels_all[1]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+    coords3 = data_frame_cells[f'{panels_all[2]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
     # Define the range of coordinates to cover both sets of points
     min_x = min(np.min(coords1[:, 0]), np.min(coords2[:, 0]), np.min(coords3[:, 0])) - 1000
     max_x = max(np.max(coords1[:, 0]), np.max(coords2[:, 0]), np.max(coords3[:, 0])) + 1000
@@ -1315,9 +1329,9 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
 
 
     ## Plot the common raster after alignment and filtering with common annotations
-    coords1 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[0]}'][["x (µm)", "y (µm)"]].to_numpy()
-    coords2 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[1]}'][["x (µm)", "y (µm)"]].to_numpy()
-    coords3 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[2]}'][["x (µm)", "y (µm)"]].to_numpy()
+    coords1 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[0]}'][["x (micron)", "y (micron)"]].to_numpy()
+    coords2 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[1]}'][["x (micron)", "y (micron)"]].to_numpy()
+    coords3 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[2]}'][["x (micron)", "y (micron)"]].to_numpy()
     # Define the range of coordinates to cover both sets of points
     min_x = min(np.min(coords1[:, 0]), np.min(coords2[:, 0]), np.min(coords3[:, 0])) - 1000
     max_x = max(np.max(coords1[:, 0]), np.max(coords2[:, 0]), np.max(coords3[:, 0])) + 1000
@@ -1363,9 +1377,9 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     
 
     ## Plot the raster after alignment
-    coords1_tr = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[0]}'][["x (µm)", "y (µm)"]].to_numpy()
-    coords2 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[1]}'][["x (µm)", "y (µm)"]].to_numpy()
-    coords3_tr = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[2]}'][["x (µm)", "y (µm)"]].to_numpy()
+    coords1_tr = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[0]}'][["x (micron)", "y (micron)"]].to_numpy()
+    coords2 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[1]}'][["x (micron)", "y (micron)"]].to_numpy()
+    coords3_tr = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[2]}'][["x (micron)", "y (micron)"]].to_numpy()
     # Define the range of coordinates to cover both sets of points
     min_x = min(np.min(coords1_tr[:, 0]), np.min(coords2[:, 0]), np.min(coords3_tr[:, 0])) - 1000
     max_x = max(np.max(coords1_tr[:, 0]), np.max(coords2[:, 0]), np.max(coords3_tr[:, 0])) + 1000

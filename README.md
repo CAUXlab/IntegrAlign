@@ -112,7 +112,8 @@ python main_IntegrAlign.py align --dwnscimg "output/downscaled_images.pkl" --tab
 
 --alpha - Transparency of the reference panel in red for visualization of the alignment (optional). Value by default : 0.4
 
-Notes : The given parameters have to be in the same panel order as in step 1 Visualization.
+Notes : If there is no intersections found between the analysis areas of each panel, one of the alignment is considered suboptimal, then it will continue to the next patient without saving merged annotations, tables or plots.
+Also, the given parameters have to be in the same panel order as in step 1 Visualization.
 
 ### 4 Fine tuning
 
@@ -120,7 +121,7 @@ This step is used to refine the alignment(s) for a specific patient. For example
 
 This will write, with the specified **mesh size** (resolution of the deformation), a "_refined" alignment report(s) and rewrite the merged coordinates tables and the merged annotations files. 
 
-You can also, if needed, validate the alignment with the mirrored cursor visualization and manually clip areas where the alignment is inadequate. This step of validation **requires the paths to the .qptiff files** of the scans stored locally to prevent lags.
+You can also, if needed, validate the alignment with the mirrored cursor visualization and manually clip areas where the alignment is inadequate. This step of validation **requires the paths to the .qptiff files** of the scans.
 
 ```bash
 python main_IntegrAlign.py finetuning --id 02005 --meshsize 6 8 --dwnscimg "output/downscaled_images.pkl" --tables "T/Cell_positions/" "DC/Cell_positions/" "TLS/Cell_positions/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --visualization all --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/"
@@ -140,7 +141,7 @@ python main_IntegrAlign.py finetuning --id 02005 --meshsize 6 8 --dwnscimg "outp
 
 --visualization - Enable mirrored cursor visualization for manual quality control (QC) of alignments, folder paths to the scans is required. Options: '0' (no visualization, default), '1' (visualize the first alignment), '2' (visualize the second alignment), 'all' (visualize all alignments).
 
---scans - Paths to 2 or 3 panel folders of the scans (.qptiff) that are stored in local. Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels. THE FILES SHOULD BE THE SAME AS THE ONES USED IN THE BATCH ALIGNMENT BUT CAN BE IN ANOTHER PLACE, if you want to do an alignment with new slides relaunch the full pipeline (with batch alignement) so it uses the new downscaled slides (verify the rotation of the slide). 
+--scans - Paths to 2 or 3 panel folders of the scans (.qptiff). Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels. THE FILES SHOULD BE THE SAME AS THE ONES USED IN THE BATCH ALIGNMENT BUT CAN BE IN ANOTHER PLACE, if you want to do an alignment with new slides relaunch the full pipeline (with batch alignement) so it uses the new downscaled slides (verify the rotation of the slide). 
 
 --resolution - Resolution in µm (optional). Value by default : 2.012948251135
 
@@ -154,7 +155,7 @@ Notes : The given parameters have to be in the same panel order as in step 1 Vis
 
 ## What is a good alignment?
 
-You have all the information needed to check if the alignment performed well in the corresponding html report located in Alignment/report/ from your output folder.
+You have all the information needed to check if the alignment performed well in the corresponding html report located in Alignment/report/ from your output folder. The chosen optimal mesh size is shown in red.
 
 Here there is detailled visualization for each alignment (with different mesh size). The most important images will be the red and blue superposition of both images and the jacobian determinant. 
 

@@ -7,6 +7,11 @@ from tifffile import TiffFile # type: ignore
 import cv2 # type: ignore
 import SimpleITK as sitk # type: ignore
 
+import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
+from openpyxl.formatting.rule import FormulaRule
+
 
 def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
     ## Get the parameters for alignment
@@ -15,9 +20,12 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
     data_dict = {}
     panel_alignment_dict = panels_name_alignment(panels, folder_paths)
 
+    unique_name_alignments = set()
     for id in tqdm(common_ids, desc="Loading downscaled images", unit="Patient"):
         data_dict[id] = {}  # Initialize sub-dictionary for this patient
         for name_alignment, folder_alignment_paths in panel_alignment_dict.items():
+            # Add the name_alignment to the set (sets automatically handle uniqueness)
+            unique_name_alignments.add(name_alignment)
             folder_path1, folder_path2 = [path for path in folder_alignment_paths]
             # Load imgs downscaled and metadata
             (tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, 
@@ -43,6 +51,89 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
     with open(output_path + "downscaled_images.pkl", "wb") as file:
         pickle.dump(data_dict, file)
     print(f'Data saved to {output_path + "downscaled_images.pkl"}')
+
+    ## Create DataFrame for common_ids with empty status columns for manual input
+    # Initialize the data dictionary with 'Sample id' and 'Excluded' columns
+    data = {
+        'Sample id': common_ids,
+        'Excluded': ['No'] * len(common_ids)
+    }
+    # Create a column for each unique name_alignment and add it to the data dictionary
+    for name_alignment in unique_name_alignments:
+        # Dynamically create a new column name for each unique 'name_alignment'
+        column_name = f'Status {name_alignment} alignment'
+        data[column_name] = [None] * len(common_ids)  # Initialize with None for manual input
+    # Add the 'Comments' column after all the Status columns
+    data['Comments'] = [None] * len(common_ids)
+    df = pd.DataFrame(data)
+
+    ## Create DataFrame for excluded_ids with empty status columns for manual input
+    excluded_data = {
+        'Sample id': excluded_ids,
+        'Excluded': ['Yes']*len(excluded_ids)
+    }
+    # Create a column for each unique name_alignment and add it to the data dictionary
+    for name_alignment in unique_name_alignments:
+        # Dynamically create a new column name for each unique 'name_alignment'
+        column_name = f'Status {name_alignment} alignment'
+        excluded_data[column_name] = [None] * len(excluded_ids)  # Initialize with None for manual input
+    # Add the 'Comments' column after all the Status columns
+    excluded_data['Comments'] = [None] * len(excluded_ids)
+
+    # Concatenate the common_ids DataFrame with the excluded_data DataFrame at the bottom
+    df = pd.concat([df, pd.DataFrame(excluded_data)], ignore_index=True)
+
+    df['Sample id'] = '"' + df['Sample id'].astype(str) + '"'
+
+    # Save to Excel (instead of CSV) to enable styling
+    excel_file_path = output_path + "Alignments_validated.xlsx"
+    df.to_excel(excel_file_path, index=False, engine='openpyxl')
+
+    # Load the Excel workbook and sheet
+    wb = load_workbook(excel_file_path)
+    ws = wb.active
+
+    # Define fill colors for gray, light green, and light red
+    gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+    light_green_fill = PatternFill(start_color="A8E6A1", end_color="A8E6A1", fill_type="solid")  # Light green
+    light_red_fill = PatternFill(start_color="FFCCCB", end_color="FFCCCB", fill_type="solid")  # Light red
+
+    # Apply gray fill to all cells in the row if 'Excluded' is 'Yes'
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=5):  # Columns 1-5 are all the columns (Sample id, Excluded, Status, Comments)
+        if row[1].value == 'Yes':  # Check if 'Excluded' (2nd column) is 'Yes'
+            for cell in row:  # Apply the gray fill to all cells in the row
+                cell.fill = gray_fill
+
+    # Create conditional formatting for 'Status first alignment' and 'Status second alignment' columns
+    # Light green for 'Y'
+    green_rule = FormulaRule(formula=['$C2="Y"'], fill=light_green_fill)  # Column C = 'Status first alignment'
+    ws.conditional_formatting.add('C2:C{}'.format(ws.max_row), green_rule)
+
+    green_rule_2 = FormulaRule(formula=['$D2="Y"'], fill=light_green_fill)  # Column D = 'Status second alignment'
+    ws.conditional_formatting.add('D2:D{}'.format(ws.max_row), green_rule_2)
+
+    # Light red for 'N'
+    red_rule = FormulaRule(formula=['$C2="N"'], fill=light_red_fill)  # Column C = 'Status first alignment'
+    ws.conditional_formatting.add('C2:C{}'.format(ws.max_row), red_rule)
+
+    red_rule_2 = FormulaRule(formula=['$D2="N"'], fill=light_red_fill)  # Column D = 'Status second alignment'
+    ws.conditional_formatting.add('D2:D{}'.format(ws.max_row), red_rule_2)
+
+    # Adjust the column widths for better readability of the headers
+    ws.column_dimensions['C'].width = 25  # Status first alignment
+    ws.column_dimensions['D'].width = 25  # Status second alignment
+    ws.column_dimensions['E'].width = 60  # Status second alignment
+
+    # Save the modified workbook with conditional formatting and adjusted column widths
+    wb.save(excel_file_path)
+
+    print(f'Data saved to {excel_file_path}')
+
+
+
+
+
+
 
 
 

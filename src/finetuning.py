@@ -6,6 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import warnings
 
 import SimpleITK as sitk # type: ignore
@@ -21,9 +22,10 @@ from src.alignment import alignment_report
 
 from src.save_images import panels_name_alignment
 
-from src.alignment import merge_annotations, rotate_coordinates, scale_gdf, transform_annotation, scale_multipolygon_coordinates
+from src.alignment import merge_annotations, rotate_coordinates, get_gdf, transform_annotation, scale_multipolygon_coordinates, plot_multipolygon
 from src.alignment import transform_filter_coordinates, filter_coordinates
 from src.alignment import save_tables, plot_rasters
+
 
 
 
@@ -62,13 +64,13 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotati
     # for name_alignment, downscaled_images_id_name_alignment in downscaled_images_id.items():
         # downscaled_images_id_name_alignment = downscaled_images_id[name_alignment]
         print("-----")
-        print(f"Alignment {name_alignment}...")
         ## Load downscaled images
         print("Loading downscaled images...")
         panels_alignment = name_alignment.split("_")
         metadata_images, img1, img2, img1_resize, img2_resize = extract_downscaled_images(downscaled_images_id_name_alignment, panels_alignment, 
                                                                                             name_alignment, turn_img_id_dict, metadata_images, id)
         ## Alignment
+        print(f"Alignment {name_alignment}...")
         spline_order = 3
         (outTx_Bspline_dict, simg2_dict, execution_time_dict, 
             metric_values_dict, outTx_Rigid, simg1_Rigid, 
@@ -98,26 +100,23 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotati
         scan_path1, scan_path2 = [path for path in scans_alignment_paths]
         warnings.filterwarnings("ignore")
         if visualization == "all":
-            manual_empty_alignment = mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment)            
+            manual_empty_alignment = mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment)            
         elif visualization == name_alignment:
-            manual_empty_alignment = mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment)
+            manual_empty_alignment = mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment)
 
-    ## Transform and merge the annotations
     response = input("Are you sure you want to rewrite the file of the merged annotations with the specified mesh size for this patient's panel alignments? (Y/n): ").strip().lower()
     if response in ['no', 'n']:
         print("Exiting the script without rewriting the annotations file.")
         sys.exit()  # Exit the script immediately
 
+    ## Transform and merge the annotations
     print("-----")
     print("Merging the annotations...") 
     mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
                         img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
     
     if visualization != "0":
-        mask = merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, resolution_micron)
-
-
-
+        mask = merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron)
 
     ## Transform and filter coordinates
     print("Transform, filer and merge coordinates...")
@@ -327,7 +326,7 @@ def getLabels(tif_tags):
 
     return channel_list, dictionary
 
-def loadQPTIFF_noresize(path):
+def load_QPTIFF_high_res(path):
     # Load qptiff file
     with TiffFile(path) as tif:
         # Get tags from DAPI channel in .pages
@@ -335,26 +334,25 @@ def loadQPTIFF_noresize(path):
         for tag in tif.pages[0].tags.values():
             name, value = tag.name, tag.value
             tif_tags[name] = value
-        # Load array with every channel in .series
-        img_data = tif.series[0].asarray()
+        # Load array with every channel
+        index_first_channel_second_downscaling = 8+1+8 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation) to get to the first channel of the second downscaling
+        index_last_channel_second_downscaling = 8+1+8+8 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation), 8 channels (second downscaling of the pyramid representation) to get to the last channel of the second downscaling
+        img_data = np.stack([tif.pages[i].asarray() for i in range(index_first_channel_second_downscaling, index_last_channel_second_downscaling)], axis=0)
+        # img_data = tif.series[0].asarray()
         
     channel_list, channel_name_dictionary = getLabels(tif_tags)
     
     return img_data, tif_tags, channel_list, channel_name_dictionary
 
 
-def load_fullRes_imgs(folder_path1, folder_path2, id, folder_name_alignment):
+def load_high_res_imgs(folder_path1, folder_path2, id, folder_name_alignment):
     # Define path of the qptiff
     panels = folder_name_alignment.split('_')
     path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
     path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
 
-    img1_data, tif_tags1, channel_list1, channel_name_dictionary1 = loadQPTIFF_noresize(path1)
-    print("path1:", path1)
-    print('first loaded')
-    img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = loadQPTIFF_noresize(path2)
-    print("path2:", path2)
-    print('second loaded')
+    img1_data, tif_tags1, channel_list1, channel_name_dictionary1 = load_QPTIFF_high_res(path1)
+    img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_QPTIFF_high_res(path2)
     
     
 
@@ -368,11 +366,12 @@ def load_fullRes_imgs(folder_path1, folder_path2, id, folder_name_alignment):
 
 
 
-def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, shapes_data_alignment=None, shapes_transformed=None, full_res=None):
+def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment = None, shapes_data_alignment=None, shapes_transformed=None, full_res=None):
     print(f"Loading .qptiff images...")
-    img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_fullRes_imgs(scan_path1, scan_path2, id, name_alignment)
+    img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_high_res_imgs(scan_path1, scan_path2, id, name_alignment)
+    scale_percent1_napari = img1_resize.shape[0] / img1_data.shape[1]
+    scale_percent2_napari = img2_resize.shape[0] / img2_data.shape[1]
     print(f"Mirrored cursor visualization for alignment {name_alignment}")
-    print(panels_alignment)
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
     outTx_Bspline = outTx_Bspline_alignment[panels_alignment[0]]
     outTx_Rigid = outTx_Rigid_alignment.get(panels_alignment[0])
@@ -387,11 +386,6 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     operation2 = metadata_images[name_alignment][f'turn_img_{panels_alignment[1]}']
     image_shape1 = metadata_images[name_alignment][f'image_shape_{panels_alignment[0]}']
     image_shape2 = metadata_images[name_alignment][f'image_shape_{panels_alignment[1]}']
-
-    print(f"scale_percent1: {scale_percent1}, type: {type(scale_percent1)}")
-    print(f"scale_percent2: {scale_percent2}, type: {type(scale_percent2)}")
-    print(f"operation1: {operation1}, operation2: {operation2}")
-    print(f"image_shape1: {image_shape1}, image_shape2: {image_shape2}")
 
     
     ## Image low resolution but fast
@@ -452,7 +446,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             # Transform to the coordinate system of sitk
             points1_sitk = [points1_napari[1], points1_napari[0]]
             # Transform to the coordinate system of the resized image (the one used for the registration)
-            scaled_points1 = tuple(value * scale_percent1 for value in points1_sitk)
+            scaled_points1 = tuple(value * scale_percent1_napari for value in points1_sitk)
             # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
             scaled_points1 = rotate_tuple_coordinates(scaled_points1, operation1, image_shape1)
             
@@ -463,7 +457,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
             scaled_pointsTR = rotate_tuple_coordinates(scaled_pointsTR, operation2, image_shape2)
             # Transform back to the coordinate system of the full image (the one used for visualization)
-            pointsTR_sitk = tuple(value / scale_percent2 for value in scaled_pointsTR)
+            pointsTR_sitk = tuple(value / scale_percent2_napari for value in scaled_pointsTR)
             # Transform back to the coordinate system of napari viewer
             pointsTR_napari = [pointsTR_sitk[1], pointsTR_sitk[0]]
             # Update the translated points in viewer2
@@ -479,9 +473,82 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     
     
     # Create an empty layer for translated points in viewer2
-    viewer2.add_points([], face_color='#00aaffff', border_color='#00aaffff', size=50, name='Translated Points')
+    viewer2.add_points([], face_color='red', size=10, name='Translated Points')
 
-    
+    if analysis_area_alignment:
+        geometry = analysis_area_alignment[panels_alignment[0]]
+        # Loop through all geometries in the GeoSeries
+        for single_polygon in geometry:
+            # Ensure it's a valid Polygon
+            if single_polygon.geom_type == 'Polygon':
+                # Extract exterior coordinates
+                single_polygon = single_polygon.buffer(0)
+                if single_polygon.geom_type == 'Polygon':
+                    # Still a Polygon after buffering
+                    coords = (np.array(single_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
+                    # Invert x and y coordinates (napari coordinate system)
+                    coords = coords[:, [1, 0]]
+                    # Add the polygon to the viewer
+                    if coords.shape[0] > 2:
+                        viewer1.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=20, name="Analysis area")
+                elif single_polygon.geom_type == 'MultiPolygon':
+                    # It turned into a MultiPolygon after buffering
+                    for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
+                        coords = (np.array(sub_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
+                        # Invert x and y coordinates (napari coordinate system)
+                        coords = coords[:, [1, 0]]
+                        # Add the sub-polygon to the viewer
+                        if coords.shape[0] > 2:
+                            viewer1.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=20, name="Analysis area")
+            
+            # Handling for MultiPolygon geometry (if not already handled)
+            elif single_polygon.geom_type == 'MultiPolygon':
+                for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
+                    coords = (np.array(sub_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
+                    # Invert x and y coordinates (napari coordinate system)
+                    coords = coords[:, [1, 0]]
+                    # Add the sub-polygon to the viewer
+                    if coords.shape[0] > 2:
+                        viewer1.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=20, name="Analysis area")
+
+
+        geometry = analysis_area_alignment[panels_alignment[1]]
+        # Loop through all geometries in the GeoSeries
+        for single_polygon in geometry:
+            # Ensure it's a valid Polygon
+            if single_polygon.geom_type == 'Polygon':
+                # Extract exterior coordinates
+                single_polygon = single_polygon.buffer(0)
+                if single_polygon.geom_type == 'Polygon':
+                    # Still a Polygon after buffering
+                    coords = (np.array(single_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
+                    # Invert x and y coordinates (napari coordinate system)
+                    coords = coords[:, [1, 0]]
+                    # Add the polygon to the viewer
+                    if coords.shape[0] > 2:
+                        viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=20, name="Analysis area")
+                elif single_polygon.geom_type == 'MultiPolygon':
+                    # It turned into a MultiPolygon after buffering
+                    for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
+                        coords = (np.array(sub_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
+                        # Invert x and y coordinates (napari coordinate system)
+                        coords = coords[:, [1, 0]]
+                        # Add the sub-polygon to the viewer
+                        if coords.shape[0] > 2:
+                            viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=20, name="Analysis area")
+            
+            # Handling for MultiPolygon geometry (if not already handled)
+            elif single_polygon.geom_type == 'MultiPolygon':
+                for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
+                    coords = (np.array(sub_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
+                    # Invert x and y coordinates (napari coordinate system)
+                    coords = coords[:, [1, 0]]
+                    # Add the sub-polygon to the viewer
+                    if coords.shape[0] > 2:
+                        viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=20, name="Analysis area")
+
+
+
     if shapes_data_alignment:
         viewer2.add_shapes(shapes_data_alignment, shape_type='polygon')
 
@@ -503,13 +570,14 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     if 'Shapes' in viewer1.layers:
         polygons = []
         for polygon in viewer1.layers['Shapes'].data:
-            polygon_sitk = transform_polygon_to_sitk(polygon, max_indices1)
+            polygon_sitk = transform_polygon_to_sitk(polygon)
             polygons.append(Polygon(polygon_sitk))
         manual_empty_geometries = gpd.GeoSeries(polygons)
 
         ## Scale annotations to downscaled image resolution
-        manual_empty_array = scale_gdf(manual_empty_geometries, scale_percent1, operation1, image_shape1, img1_resize, c="B")
-        manual_empty_alignment[f'{panels_alignment[0]}_in_{panels_alignment[1]}_panel'] = transform_annotation(manual_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img2_resize)
+        manual_empty_array = get_gdf(manual_empty_geometries, scale_percent1_napari, operation1, image_shape1, img1_resize, c="B")
+        # First scale with scale percent of the second downscaling (for napari visualization) and second scale with the scale percent of the full resolution image to get back to the resolution of the coordinates in pixel
+        manual_empty_alignment[f'{panels_alignment[0]}_in_{panels_alignment[1]}_panel'] = transform_annotation(manual_empty_array, scale_percent1_napari, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img2_resize)
 
 
     return manual_empty_alignment
@@ -517,20 +585,12 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
 
 # Functions that convert coordinates between napari and sitk systems
 ## reference point (origin) is not the same in both systems
-def convert_coordinates_napari_to_sitk(napari_coordinates, max_indices):
-    x_napari, y_napari = napari_coordinates
-    x_sitk = max_indices[1] - y_napari
-    y_sitk = x_napari
-    x_sitk = max_indices[1] - x_sitk  
-    point = [x_sitk, y_sitk]
-    return point
-
-def transform_polygon_to_sitk(polygon, max_indices1):
+def transform_polygon_to_sitk(polygon):
     try:
         polygon1_sitk = []
         for points1_napari in polygon:
             # Transform to the coordinate system of sitk
-            points1_sitk = convert_coordinates_napari_to_sitk(points1_napari, max_indices1)
+            points1_sitk = [points1_napari[1], points1_napari[0]]
             polygon1_sitk.append(points1_sitk)
 
         return np.array(polygon1_sitk)
@@ -605,22 +665,25 @@ def wavelength_to_rgb(nm):
 
 
 
-def merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, resolution_micron):
+def merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron):
     panels_tr = [key for key in manual_empty_alignment.keys() if "in" in key]
     manual_empty_alignment_list = []
     for panel in panels_tr:
         manual_empty_alignment_list.append(manual_empty_alignment[panel].apply(lambda geom: geom if geom.is_valid else geom.buffer(0)))
+
     ## Filter out empty GeoSeries
     manual_empty_alignment_list = [g for g in manual_empty_alignment_list if not g.empty]
     ## Merge the remaining GeoSeries
     merged_polygons = gpd.GeoSeries(unary_union([g.unary_union for g in manual_empty_alignment_list]))
+
     # Create a Polygon representing the inner boundary
     inner_boundary = merged_polygons.unary_union
+
     # Construct the mask by taking the difference between the outer boundary and inner boundary
     mask = mask.difference(inner_boundary)
 
     # Plot the MultiPolygon
-    # plot_multipolygon(scaled_mask)
+    # plot_multipolygon(mask)
     
     ## Convert mask to micro meters
     scaled_mask = scale_multipolygon_coordinates(mask, resolution_micron)
