@@ -18,6 +18,7 @@ import geopandas as gpd
 from shapely.ops import unary_union
 import json
 import shapely.vectorized
+import matplotlib.colors as mcolors
 
 
 def alignment(downscaled_images_path, coordinate_tables, annotations_tables, resolution_micron, number_ms, metric, pixel_size_raster_micron, alpha_red):
@@ -1240,10 +1241,15 @@ def save_tables(merged_cell_coordinates, output_path, id):
 
 
 def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pixel_size_raster_micron, output_path, panels_all, id, resolution_micron):
+    '''
     ## Plot the raster before alignment
-    coords1 = data_frame_cells[f'{panels_all[0]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
-    coords2 = data_frame_cells[f'{panels_all[1]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
-    coords3 = data_frame_cells[f'{panels_all[2]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+    if len(panels_all)==3:
+        coords1 = data_frame_cells[f'{panels_all[0]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+        coords2 = data_frame_cells[f'{panels_all[1]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+        coords3 = data_frame_cells[f'{panels_all[2]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+    if len(panels_all)==2:
+        coords1 = data_frame_cells[f'{panels_all[0]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+        coords2 = data_frame_cells[f'{panels_all[1]}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
     # Define the range of coordinates to cover both sets of points
     min_x = min(np.min(coords1[:, 0]), np.min(coords2[:, 0]), np.min(coords3[:, 0])) - 1000
     max_x = max(np.max(coords1[:, 0]), np.max(coords2[:, 0]), np.max(coords3[:, 0])) + 1000
@@ -1279,7 +1285,61 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.figtext(0.5, -0.1, f"Correlation 2-3 : {np.round(correlation_2_3, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
     plt.savefig(output_path + f"Alignment/plots/{id}_raster_before_alignment.png", dpi=300, bbox_inches='tight')
     plt.close()
+    '''
 
+    ## Plot the raster before alignment
+    # Extract coordinates
+    coords = [
+        data_frame_cells[f'{panel}_panel_df'][["x (micron)", "y (micron)"]].to_numpy()
+        for panel in panels_all
+    ]
+    # Define the range of coordinates to cover both sets of points
+    min_x = min(np.min(coords_set[:, 0]) for coords_set in coords) - 1000
+    max_x = max(np.max(coords_set[:, 0]) for coords_set in coords) + 1000
+    min_y = min(np.min(coords_set[:, 1]) for coords_set in coords) - 1000
+    max_y = max(np.max(coords_set[:, 1]) for coords_set in coords) + 1000
+    # Create rasters with a fixed size
+    rasters = [
+        create_raster_from_points(
+            coords_set, 
+            pixel_size=pixel_size_raster_micron, 
+            min_x=min_x, 
+            max_x=max_x, 
+            min_y=min_y, 
+            max_y=max_y
+        )
+        for coords_set in coords
+    ]
+    # Compute the pearson correlation between rasters
+    correlations = [
+        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+        for i in range(len(rasters))
+        for j in range(i + 1, len(rasters))
+    ]
+    # Plot the rasters
+    # Define colors and labels dynamically based on panels_all
+    colors = ["blue", "green", "red"][:len(panels_all)]
+    labels = list(map("DAPI {}".format, panels_all))
+    plt.figure(figsize=(4, 4))
+    for i, raster in enumerate(rasters):
+        cmap = plt.cm.colors.ListedColormap(["white", colors[i]])
+        plt.imshow(raster, cmap=cmap, extent=[min_x, max_x, min_y, max_y], alpha=0.5, aspect='auto')
+    legend_patches = [
+        mpatches.Patch(color=colors[i], label=labels[i])
+        for i in range(len(rasters))
+    ]
+    plt.gca().invert_yaxis()
+    plt.axis("off")
+    plt.legend(handles=legend_patches, loc="upper right")
+    for idx, corr in enumerate(correlations):
+        i, j = divmod(idx, len(rasters))
+        plt.figtext(0.5, -0.05 * (idx + 1), f"Correlation {i + 1}-{j + 1} : {np.round(corr, 3)}", wrap=True, horizontalalignment="center", fontsize=12)
+    # Save the plot
+    plt.savefig(output_path + f"Alignment/plots/{id}_raster_before_alignment.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+    '''
     ## Plot the common raster after alignment
     coords1 = cell_coordinates[f'{panels_all[0]}_panel_DAPI_transformed'] / resolution_micron
     coords2 = cell_coordinates[f'{panels_all[1]}_panel_DAPI'] / resolution_micron
@@ -1326,12 +1386,70 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.figtext(0.5, -0.1, f"Correlation 2-3 : {np.round(correlation_2_3, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
     plt.savefig(output_path + f"Alignment/plots/{id}_common_raster.png", dpi=300, bbox_inches='tight')
     plt.close()
+    '''
 
 
+    ## Plot the common raster after alignment
+    coords = [
+        cell_coordinates[f'{panel}_panel_DAPI_transformed'] / resolution_micron if i % 2 == 0 
+        else cell_coordinates[f'{panel}_panel_DAPI'] / resolution_micron
+        for i, panel in enumerate(panels_all)
+    ]
+    # Define the range of coordinates to cover both sets of points
+    all_coords = [coords[i] for i in range(len(coords))]
+    min_x = min(np.min(c[:, 0]) for c in all_coords) - 1000
+    max_x = max(np.max(c[:, 0]) for c in all_coords) + 1000
+    min_y = min(np.min(c[:, 1]) for c in all_coords) - 1000
+    max_y = max(np.max(c[:, 1]) for c in all_coords) + 1000
+    # Create rasters with a fixed size  
+    rasters = [
+        create_raster_from_points(c, pixel_size=pixel_size_raster_micron, 
+                                min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
+        for c in all_coords
+    ]
+    # Compute the pearson correlation between rasters
+    correlations = [
+        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0] 
+        for i in range(len(rasters)) 
+        for j in range(i + 1, len(rasters))
+    ]
+    # Create a new array with the same shape initialized to zeros
+    new_array = np.zeros_like(rasters[0], dtype=np.uint8)
+    # Apply the rules to create the new array
+    new_array[np.logical_and.reduce([(r == 1) for r in rasters])] = 3
+    for i, r in enumerate(rasters):
+        other_rasters = [r for j, r in enumerate(rasters) if j != i]
+        new_array[np.logical_and.reduce([r == 1 for r in other_rasters]) & (r == 0)] = 1
+    # Create an RGB image with the same height and width as new_array
+    rgb_image = np.zeros((*new_array.shape, 3), dtype=np.uint8)
+    colors = [[255, 255, 255], [255, 0, 0], [255, 165, 0], [0, 255, 0]]
+    for i in range(len(colors)):
+        rgb_image[new_array == i] = colors[i]
+    colors_normalized = [[r / 255, g / 255, b / 255] for [r, g, b] in colors]
+    legends = [
+        mpatches.Patch(color=colors_normalized[1], label='Only one'),
+        mpatches.Patch(color=colors_normalized[2], label='Part common'),
+        mpatches.Patch(color=colors_normalized[3], label='Common')
+    ]
+    # Plot the RGB image
+    plt.imshow(rgb_image)
+    plt.axis('off')  # Turn off the axis
+    plt.gca().invert_yaxis()
+    plt.legend(handles=legends, loc='upper right')
+    for i, corr in enumerate(correlations):
+        plt.figtext(0.5, -0.05 * i, f"Correlation {i + 1}-{i + 2}: {np.round(corr, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
+    plt.savefig(output_path + f"Alignment/plots/{id}_common_raster.png", dpi=300, bbox_inches='tight')
+    plt.close()
+        
+
+
+    '''
     ## Plot the common raster after alignment and filtering with common annotations
     coords1 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[0]}'][["x (micron)", "y (micron)"]].to_numpy()
     coords2 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[1]}'][["x (micron)", "y (micron)"]].to_numpy()
     coords3 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[2]}'][["x (micron)", "y (micron)"]].to_numpy()
+
+    
     # Define the range of coordinates to cover both sets of points
     min_x = min(np.min(coords1[:, 0]), np.min(coords2[:, 0]), np.min(coords3[:, 0])) - 1000
     max_x = max(np.max(coords1[:, 0]), np.max(coords2[:, 0]), np.max(coords3[:, 0])) + 1000
@@ -1374,8 +1492,59 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.figtext(0.5, -0.1, f"Correlation 2-3 : {np.round(correlation_2_3, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
     plt.savefig(output_path + f"Alignment/plots/{id}_common_raster_filtered_annotations.png", dpi=300, bbox_inches='tight')
     plt.close()
-    
+    '''
 
+    ## Plot the common raster after alignment and filtering with common annotations
+    coords = [
+        merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panel}'][["x (micron)", "y (micron)"]].to_numpy()
+        for panel in panels_all
+    ]
+    # Define the range of coordinates to cover both sets of points
+    min_x = min(np.min(c[:, 0]) for c in coords) - 1000
+    max_x = max(np.max(c[:, 0]) for c in coords) + 1000
+    min_y = min(np.min(c[:, 1]) for c in coords) - 1000
+    max_y = max(np.max(c[:, 1]) for c in coords) + 1000
+    # Create rasters with a fixed size
+    rasters = [
+        create_raster_from_points(c, pixel_size=pixel_size_raster_micron, 
+                                min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
+        for c in coords
+    ]
+    # Compute the Pearson correlation between rasters
+    correlations = [
+        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+        for i in range(len(rasters)) 
+        for j in range(i + 1, len(rasters))
+    ]
+    # Create a new array with the same shape initialized to zeros
+    new_array = np.zeros_like(rasters[0], dtype=np.uint8)
+    # Apply the rules to create the new array
+    new_array[np.logical_and.reduce([r == 1 for r in rasters])] = 3
+    for i, r in enumerate(rasters):
+        other_rasters = [r for j, r in enumerate(rasters) if j != i]
+        new_array[np.logical_and.reduce([r == 1 for r in other_rasters]) & (r == 0)] = 1
+    # Create an RGB image with the same height and width as new_array
+    rgb_image = np.zeros((*new_array.shape, 3), dtype=np.uint8)
+    # Assign specific colors based on the pixel values
+    colors = [[255, 255, 255], [255, 0, 0], [255, 165, 0], [0, 255, 0]]
+    for i in range(len(colors)):
+        rgb_image[new_array == i] = colors[i]
+    colors_normalized = [[r / 255, g / 255, b / 255] for [r, g, b] in colors]
+    legend1_patches = mpatches.Patch(color=colors_normalized[1], label='Only one')
+    legend2_patches = mpatches.Patch(color=colors_normalized[2], label='Part common')
+    legend3_patches = mpatches.Patch(color=colors_normalized[3], label='Common')
+    # Plot the raster
+    plt.imshow(rgb_image)
+    plt.axis('off')  # Turn off the axis
+    plt.gca().invert_yaxis()
+    plt.legend(handles=[legend1_patches, legend2_patches, legend3_patches], loc='upper right')
+    for i, corr in enumerate(correlations):
+        plt.figtext(0.5, -0.05 * i, f"Correlation {i + 1}-{i + 2}: {np.round(corr, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
+    plt.savefig(output_path + f"Alignment/plots/{id}_common_raster_filtered_annotations.png", dpi=300, bbox_inches='tight')
+    plt.close()
+
+    
+    '''
     ## Plot the raster after alignment
     coords1_tr = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[0]}'][["x (micron)", "y (micron)"]].to_numpy()
     coords2 = merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panels_all[1]}'][["x (micron)", "y (micron)"]].to_numpy()
@@ -1409,6 +1578,60 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.figtext(0.5, -0.1, f"Correlation 2-3 : {np.round(correlation_2_3, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
     plt.savefig(output_path + f"Alignment/plots/{id}_raster_alignment.png", dpi=300, bbox_inches='tight')
     plt.close()
+    '''
+
+
+    ## Plot the raster before alignment
+    # Extract coordinates
+    coords = [
+        merged_cell_coordinates[merged_cell_coordinates['Panel'] == f'{panel}'][["x (micron)", "y (micron)"]].to_numpy()
+        for panel in panels_all
+    ]
+    # Define the range of coordinates to cover both sets of points
+    min_x = min(np.min(coords_set[:, 0]) for coords_set in coords) - 1000
+    max_x = max(np.max(coords_set[:, 0]) for coords_set in coords) + 1000
+    min_y = min(np.min(coords_set[:, 1]) for coords_set in coords) - 1000
+    max_y = max(np.max(coords_set[:, 1]) for coords_set in coords) + 1000
+    # Create rasters with a fixed size
+    rasters = [
+        create_raster_from_points(
+            coords_set, 
+            pixel_size=pixel_size_raster_micron, 
+            min_x=min_x, 
+            max_x=max_x, 
+            min_y=min_y, 
+            max_y=max_y
+        )
+        for coords_set in coords
+    ]
+    # Compute the pearson correlation between rasters
+    correlations = [
+        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+        for i in range(len(rasters))
+        for j in range(i + 1, len(rasters))
+    ]
+    # Plot the rasters
+    # Define colors and labels dynamically based on panels_all
+    colors = ["blue", "green", "red"][:len(panels_all)]
+    labels = list(map("DAPI {}".format, panels_all))
+    plt.figure(figsize=(4, 4))
+    for i, raster in enumerate(rasters):
+        cmap = plt.cm.colors.ListedColormap(["white", colors[i]])
+        plt.imshow(raster, cmap=cmap, extent=[min_x, max_x, min_y, max_y], alpha=0.5, aspect='auto')
+    legend_patches = [
+        mpatches.Patch(color=colors[i], label=labels[i])
+        for i in range(len(rasters))
+    ]
+    plt.gca().invert_yaxis()
+    plt.axis("off")
+    plt.legend(handles=legend_patches, loc="upper right")
+    for idx, corr in enumerate(correlations):
+        i, j = divmod(idx, len(rasters))
+        plt.figtext(0.5, -0.05 * (idx + 1), f"Correlation {i + 1}-{j + 1} : {np.round(corr, 3)}", wrap=True, horizontalalignment="center", fontsize=12)
+    # Save the plot
+    plt.savefig(output_path + f"Alignment/plots/{id}_raster_alignment.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
 
 
 

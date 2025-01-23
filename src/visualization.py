@@ -24,7 +24,8 @@ def visualization(scans_paths, annotations, panels, output_path):
 
     ## Sort the common ids between the panels
     common_ids = set.intersection(*map(set, ids_panels))
-    sorted_common_ids = sorted(common_ids, key=lambda x: int(x))
+    # sorted_common_ids = sorted(common_ids, key=lambda x: int(x))
+    sorted_common_ids = sorted(common_ids, key=lambda x: (x.isdigit(), int(x) if x.isdigit() else x))
     print(f"There is {len(sorted_common_ids)} patients that are common in every panel")
 
     ## Save the report with the compressed images of every common ids
@@ -81,7 +82,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
             artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
 
             analysis_area_gdf_poly = analysis_area_alignment[panel]
-            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, operation = 0, image_shape = img_resized.shape)
+            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, operation = 0, image_shape = img_resized.shape, img_resize = img_resized)
             annotations_resized.append([area * scale_percent for area in analysis_area_array])
         ## Plot the compressed images
         fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
