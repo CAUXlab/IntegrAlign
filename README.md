@@ -58,7 +58,7 @@ This steps will create a report file ```images_report.html``` that plots every p
 
 --scans - 2 or 3 paths to the folders of each panel that contains the .qptiff files of every patients.
 
---annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson).
+--annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Optional.
 
 --panels - Panel names.
 
