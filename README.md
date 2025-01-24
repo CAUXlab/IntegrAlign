@@ -58,11 +58,13 @@ This steps will create a report file ```images_report.html``` that plots every p
 
 --scans - 2 or 3 paths to the folders of each panel that contains the .qptiff files of every patients.
 
+--annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson).
+
 --panels - Panel names.
 
 --output - Path to the main output folder.
 
-Notes : **The order is crucial** for --folders and --panels options. It should be consistent at every step and the reference panel has to be in the middle for alignment of 3 panels or in last position for alignment of 2 panels.
+Notes : **The order is crucial** for --scans, --annotations and --panels options. It should be consistent at every step and the reference panel has to be in the middle for alignment of 3 panels or in last position for alignment of 2 panels.
 
 ### 2 Save downscaled images
 
