@@ -49,7 +49,7 @@ pip install .
 Once you have activated your virtual environment and installed the necessary dependencies, you can run the first step of the tool by using:
 
 ```bash
-python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --panels T DC TLS --output "output/"
+python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --panels T DC TLS --output "output/"
 ```
 
 This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help to determine which slides cannot be aligned and if some panels need to be rotated for best alignment.
