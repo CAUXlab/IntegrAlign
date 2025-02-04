@@ -68,7 +68,7 @@ Notes : **The order is crucial** for --scans, --annotations and --panels options
 
 ### 2 Save downscaled images
 
-This steps will preprocess the data (downscaling and rotation) and save the images without excluded patients. This will generate a file containing downscaled images, allowing for alignment processing without needing access to the ```.qptiff``` files.
+This steps will preprocess the data (downscaling and rotation) and save the images without excluded patients. This will generate a file containing downscaled images, allowing for alignment processing without needing access to the ```.qptiff``` files. An excel file (```Alignments_validated.xlsx```) will also be generated to track the validation status of each registration after the alignment step completed.
 
 ```bash
 python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 02006 06001 08006 --rotate 01008_DC_2
