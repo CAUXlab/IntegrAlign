@@ -3,6 +3,8 @@ import os
 from tqdm import tqdm # type: ignore
 
 from tifffile import TiffFile # type: ignore
+from tifffile.tiffcomment import tiffcomment
+from xml.etree import ElementTree
 import cv2 # type: ignore
 
 import matplotlib.pyplot as plt # type: ignore
@@ -10,6 +12,8 @@ from io import BytesIO
 import base64
 import json
 import numpy as np
+import scipy.ndimage
+
 
 from src.alignment import get_annotations, get_gdf
 
@@ -49,7 +53,7 @@ def find_ids(folder_path):
     
     ids = []
     for filename in os.listdir(folder_path):
-        if filename.endswith('.qptiff'):
+        if filename.endswith(('.tif', '.qptiff')):
             match = id_regex.match(filename)
             if match:
                 ids.append(match.group())
@@ -66,7 +70,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
         ## Get all compressed images and annotations
         for scan, annotations, panel in zip(scans_paths, annotations_paths, panels):
             # Define scan path
-            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(".qptiff")), None)
+            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(('.tif', '.qptiff'))), None)
             # print(f"{panel}:", path)
             # Load image
             diff_index_pages = 10
@@ -149,16 +153,45 @@ def save_html_report(figs, ids, output_html="report.html"):
     print(f"Report saved to {output_html}")
 
 
-def load_compressed_img(path_qptiff, diff_index_pages):
-    tif = TiffFile(path_qptiff)
-    # Load the most compressed DAPI image in .pages
-    most_comp_DAPI_index = len(tif.pages) - diff_index_pages
-    img_resized = tif.pages[most_comp_DAPI_index].asarray()
+def load_compressed_img(path_scan, diff_index_pages):
+    if path_scan.endswith('.qptiff'):
+        tif = TiffFile(path_scan)
+        # Load the most compressed DAPI image in .pages
+        most_comp_DAPI_index = len(tif.pages) - diff_index_pages
+        img_resized = tif.pages[most_comp_DAPI_index].asarray()
 
-    tif_tags= {}
-    for tag in tif.pages[0].tags.values():
-        name, value = tag.name, tag.value
-        tif_tags[name] = value
-    scale_percent = img_resized.shape[0] / tif_tags['ImageLength']
+        tif_tags= {}
+        for tag in tif.pages[0].tags.values():
+            name, value = tag.name, tag.value
+            tif_tags[name] = value
+        scale_percent = img_resized.shape[0] / tif_tags['ImageLength']
+    elif path_scan.endswith('.tif'):
+        tif = TiffFile(path_scan, is_ome=False)
+        # Load the most compressed DAPI image in .levels
+        img_resized = tif.series[0].levels[-1].asarray()[0]
+        # img_resized = rotate_array(img_resized, 180)  # Rotate
+        # Get scale percent from full res image and compressed image sizes
+        xml = tiffcomment(path_scan)
+        root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
+        sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
+        scale_percent = int(sizeX[-1])/int(sizeX[0])
     
     return img_resized, scale_percent
+
+
+
+def rotate_array(array, angle):
+    """
+    Rotates a 2D NumPy array by a specified angle without modifying values due to interpolation.
+    
+    Parameters:
+        array (numpy.ndarray): Input 2D array.
+        angle (float): Rotation angle in degrees (from -180 to 180).
+    
+    Returns:
+        numpy.ndarray: Rotated array.
+    """
+    return scipy.ndimage.rotate(array, angle, reshape=False, mode='nearest', order=0)
+
+
+
