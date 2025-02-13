@@ -162,16 +162,16 @@ You have all the information needed to check if the alignment performed well in 
 Here there is detailled visualization for each alignment (with different mesh size). The most important images will be the red and blue superposition of both images and the jacobian determinant. 
 
 The first one will show you if the images align well, for example here the alignment between T and DC seems well aligned. 
-![image](https://github.com/user-attachments/assets/8bd0e81c-f8d0-4f2e-9c98-caa6986b5526)
+![overlay_good_alignment](images/overlay_good_alignment.png)
 
 The jacobian will show you if deformation is done inside the tissue, here there is no deformation inside the tissue. 
-![image](https://github.com/user-attachments/assets/03d1e12f-ca0b-4858-b6f2-ed0203b7278e)
+![jacobian_good_alignment](images/jacobian_good_alignment.png)
 
 For the alignment between TLS and DC otherwise we can see the blue image doesn't fit well with the red image inside the tissue.
-![image](https://github.com/user-attachments/assets/61fa4a95-855e-4114-bd92-783878f355aa)
+![overlay_bad_alignment](images/overlay_bad_alignment.png)
 
 We also have huge deformation inside the tissue for most of mesh sizes (here mesh size at 8, 9 and 10 ), this alignment did not performed well and need to be excluded in further analysis.
-![image](https://github.com/user-attachments/assets/4e47c660-97c0-40a5-b128-5b96f9ab59a5)
+![jacobian_bad_alignment](images/jacobian_bad_alignment.png)
 
 Indeed when we visualize the images in higher resolution with the mirrored cursor we can observe that the TLS tissue exhibits irregular tearing throughout, which is inconsistent with the tearing seen in the DC panel. This make the TLS panel impossible to align with the DC panel in our case since the tissue structure is completly different. 
 
