@@ -73,8 +73,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
             path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(('.tif', '.qptiff'))), None)
             # print(f"{panel}:", path)
             # Load image
-            diff_index_pages = 10
-            img_resized, scale_percent = load_compressed_img(path, diff_index_pages)
+            img_resized, scale_percent = load_compressed_img(path)
             # Scale images to 8bit
             img_resized = cv2.convertScaleAbs(img_resized)
             imgs_resized.append(img_resized)
@@ -106,8 +105,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
             path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(".qptiff")), None)
             # print(f"{panel}:", path)
             # Load image
-            diff_index_pages = 10
-            img_resized, scale_percent = load_compressed_img(path, diff_index_pages)
+            img_resized, scale_percent = load_compressed_img(path)
             # Scale images to 8bit
             img_resized = cv2.convertScaleAbs(img_resized)
 
@@ -153,18 +151,28 @@ def save_html_report(figs, ids, output_html="report.html"):
     print(f"Report saved to {output_html}")
 
 
-def load_compressed_img(path_scan, diff_index_pages):
+def load_compressed_img(path_scan):
     if path_scan.endswith('.qptiff'):
         tif = TiffFile(path_scan)
-        # Load the most compressed DAPI image in .pages
-        most_comp_DAPI_index = len(tif.pages) - diff_index_pages
+    
+        ## Load the most compressed DAPI image in .pages
+        # get nb of channels
+        last_indexes = 10
+        im_sizes = []
+        for im in tif.pages[-last_indexes:]:  
+            im_sizes.append(len(im.asarray()))
+        from collections import Counter
+        count_dict = Counter(im_sizes)
+        nb_channels = max(count_dict.values())
+        most_comp_DAPI_index = len(tif.pages) - nb_channels+2
         img_resized = tif.pages[most_comp_DAPI_index].asarray()
-
+        # Get scale_percent
         tif_tags= {}
         for tag in tif.pages[0].tags.values():
             name, value = tag.name, tag.value
             tif_tags[name] = value
         scale_percent = img_resized.shape[0] / tif_tags['ImageLength']
+
     elif path_scan.endswith('.tif'):
         tif = TiffFile(path_scan, is_ome=False)
         # Load the most compressed DAPI image in .levels

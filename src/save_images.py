@@ -184,41 +184,53 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, 
     # print("path2:", path2)
     
     ## Load images
-    diff_index_pages = 10
-    tif_tags1, channel_list1, channel_name_dictionary1, img1_resize, scale_percent1 = get_data_alignment(path1, diff_index_pages)
-    tif_tags2, channel_list2, channel_name_dictionary2, img2_resize, scale_percent2 = get_data_alignment(path2, diff_index_pages)
+    tif_tags1, channel_list1, channel_name_dictionary1, nb_channels1, img1_resize, scale_percent1 = get_data_alignment(path1)
+    tif_tags2, channel_list2, channel_name_dictionary2, nb_channels2, img2_resize, scale_percent2 = get_data_alignment(path2)
     # print("Compression")
     comp_lvl1 = int((1/scale_percent1))
     comp_lvl2 = int((1/scale_percent2))
     # print(f"img1: 1/{comp_lvl1}ème")
     # print(f"img2: 1/{comp_lvl2}ème")
-    
+
     # Check if both images are the same size
     if comp_lvl2 < comp_lvl1:
-        # print("Not same compression level")
+        diff_index_pages = nb_channels1+2
+        print(f"Patient {id}: Not same compression level")
         tif = TiffFile(path1)
         while comp_lvl2 < comp_lvl1:
-            diff_index_pages += 8
+            diff_index_pages_tmp = diff_index_pages
+            diff_index_pages += nb_channels1
+            im_sizes = []
+            for im in tif.pages[-diff_index_pages:-diff_index_pages_tmp]:  
+                im_sizes.append(len(im.asarray()))
+            if len(set(im_sizes)) > 1:
+                diff_index_pages += 1
             most_comp_DAPI_index = len(tif.pages) - diff_index_pages
             img1_resize = tif.pages[most_comp_DAPI_index].asarray()
             scale_percent1 = img1_resize.shape[0] / tif_tags1['ImageLength']
             comp_lvl1 = int((1/scale_percent1))
-            # print("Compression")
-            # print(f"img1: 1/{comp_lvl1}ème")
-            # print(f"img2: 1/{comp_lvl2}ème")
-    
+            print("Finding the correct compression")
+            print(f"img1: 1/{comp_lvl1}ème")
+            print(f"img2: 1/{comp_lvl2}ème")
     if comp_lvl1 < comp_lvl2:
-        # print("Not same compression level")
+        diff_index_pages = nb_channels2+2
+        print(f"Patient {id}: Not same compression level")
         tif = TiffFile(path2)
         while comp_lvl1 < comp_lvl2:
-            diff_index_pages += 8
+            diff_index_pages_tmp = diff_index_pages
+            diff_index_pages += nb_channels2
+            im_sizes = []
+            for im in tif.pages[-diff_index_pages:-diff_index_pages_tmp]:  
+                im_sizes.append(len(im.asarray()))
+            if len(set(im_sizes)) > 1:
+                diff_index_pages += 1
             most_comp_DAPI_index = len(tif.pages) - diff_index_pages
             img2_resize = tif.pages[most_comp_DAPI_index].asarray()
             scale_percent2 = img2_resize.shape[0] / tif_tags2['ImageLength']
             comp_lvl2 = int((1/scale_percent2))
-            # print("Compression")
-            # print(f"img1: 1/{comp_lvl1}ème")
-            # print(f"img2: 1/{comp_lvl2}ème")
+            print("Finding the correct compression")
+            print(f"img1: 1/{comp_lvl1}ème")
+            print(f"img2: 1/{comp_lvl2}ème")
 
     # Scale images to 8bit
     img1_8bit = cv2.convertScaleAbs(img1_resize)
@@ -241,20 +253,31 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, 
     return tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, img1, img2, img1_arr, img2_arr
 
 
-def get_data_alignment(path_qptiff, diff_index_pages):
+def get_data_alignment(path_qptiff):
     tif = TiffFile(path_qptiff)
-    # Get tags from DAPI channel in .pages
+    
+    ## Get tags from DAPI channel in .pages
     tif_tags= {}
     for tag in tif.pages[0].tags.values():
         name, value = tag.name, tag.value
         tif_tags[name] = value
     channel_list, channel_name_dictionary = getLabels(tif_tags)
-    # Load the most compressed DAPI image in .pages
-    most_comp_DAPI_index = len(tif.pages) - diff_index_pages
+    
+    ## Load the most compressed DAPI image in .pages
+    # get nb of channels
+    last_indexes = 10
+    im_sizes = []
+    for im in tif.pages[-last_indexes:]:  
+        im_sizes.append(len(im.asarray()))
+    from collections import Counter
+    count_dict = Counter(im_sizes)
+    nb_channels = max(count_dict.values())
+    most_comp_DAPI_index = len(tif.pages) - nb_channels+2
     img_resize = tif.pages[most_comp_DAPI_index].asarray()
     scale_percent = img_resize.shape[0] / tif_tags['ImageLength']
     
-    return tif_tags, channel_list, channel_name_dictionary, img_resize, scale_percent
+    return tif_tags, channel_list, channel_name_dictionary, nb_channels, img_resize, scale_percent
+
     
 
 def transform_image(img, operation):

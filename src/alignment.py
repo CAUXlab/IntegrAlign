@@ -106,7 +106,7 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
         for name_alignment in downscaled_images_id.keys():
             panels_alignment = name_alignment.split("_")
             merged_cell_coordinates = transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_cells, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, mask, resolution_micron, merged_cell_coordinates)
-        merged_cell_coordinates = filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, merged_cell_coordinates)
+        merged_cell_coordinates = filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates)
         ## Save new coordinates table
         save_tables(merged_cell_coordinates, output_path, id)
         ## Plot cell coordinates before and after alignment
@@ -330,33 +330,51 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
     df = pd.read_csv(csv_file_path)
     
     new_df = pd.DataFrame()
-    # Compute the center coordinates and store them in the new DataFrame
-    ## Convert pixel coordinates to micrometers
-    new_df['x (micron)'] = df['x']
-    new_df['y (micron)'] = df['y']
 
-    new_df['x'] = df['x'] * resolution_micron
-    new_df['y'] = df['y'] * resolution_micron
+    required_columns = [
+    'x', 'y', 'Phenotype', 'Cell_type', 'ID', 'Tissue_Category',
+    'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel'  # added required columns for the commented code
+    ]
+
+    # Check if it is a table from SPIAT with cell types or not
+    if all(col in df.columns for col in required_columns):
+        # Store the coordinates in the new DataFrame
+        ## Convert micrometers coordinates to pixel
+        new_df['x (micron)'] = df['x']
+        new_df['y (micron)'] = df['y']
+
+        new_df['x'] = df['x'] * resolution_micron
+        new_df['y'] = df['y'] * resolution_micron
+            
+        # new_df['x'] = ((df['XMin_pixel'] + df['XMax_pixel']) / 2)
+        # new_df['y'] = ((df['YMin_pixel'] + df['YMax_pixel']) / 2)
         
-    # new_df['x'] = ((df['XMin_pixel'] + df['XMax_pixel']) / 2)
-    # new_df['y'] = ((df['YMin_pixel'] + df['YMax_pixel']) / 2)
-    
-    new_df['Phenotype'] = df['Phenotype']
-    new_df['Cell_type'] = df['Cell_type']
-    new_df['Object Id'] = df['ID']
-    new_df['Classifier Label'] = df['Tissue_Category']
+        new_df['Phenotype'] = df['Phenotype']
+        new_df['Cell_type'] = df['Cell_type']
+        new_df['Object Id'] = df['ID']
+        new_df['Classifier Label'] = df['Tissue_Category']
 
-    '''
-    print(f"\nTotal number of cells: {len(new_df)}")
-    print("--")
-    cell_type_counts = df['Cell_type'].value_counts()
-    for cell_type, count in cell_type_counts.items():
-        print(f"{cell_type}: {count} cells")
-        # cell_coordinates[f'{panel}_panel_{cell_type}'] = new_df[new_df['Cell_type'] == cell_type][['x', 'y']].to_numpy()
-    '''
-    
-    cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
-    data_frame_cells[f'{panel}_panel_df'] = new_df
+        '''
+        print(f"\nTotal number of cells: {len(new_df)}")
+        print("--")
+        cell_type_counts = df['Cell_type'].value_counts()
+        for cell_type, count in cell_type_counts.items():
+            print(f"{cell_type}: {count} cells")
+            # cell_coordinates[f'{panel}_panel_{cell_type}'] = new_df[new_df['Cell_type'] == cell_type][['x', 'y']].to_numpy()
+        '''
+        
+        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
+        data_frame_cells[f'{panel}_panel_df'] = new_df
+
+    else:
+        new_df = df.copy()
+
+        new_df['x (micron)'] = df['x_']
+        new_df['y (micron)'] = df['y_']
+
+        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
+        data_frame_cells[f'{panel}_panel_df'] = new_df
+
 
     return cell_coordinates, data_frame_cells
 
@@ -1176,10 +1194,18 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     # Original DataFrame
     df_cells = data_frame_cells[f'{panels_alignment[0]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
-    filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
-    filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
-    filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
-    filtered_df
+    required_columns = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
+    # Check if all required columns are present in df
+    if all(col in df_cells.columns for col in required_columns):
+        filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
+    else:
+        # Get all columns in df_cells except for 'x' and 'y'
+        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
+        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
 
     filtered_df['Panel'] = panels_alignment[0]
     merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
@@ -1187,7 +1213,7 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     return merged_cell_coordinates
 
 
-def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, merged_cell_coordinates):
+def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates):
     print("----------------------")
     print(panels_alignment[1])
     coords = cell_coordinates[f'{panels_alignment[1]}_panel_DAPI']
@@ -1218,10 +1244,18 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     # Original DataFrame
     df_cells = data_frame_cells[f'{panels_alignment[1]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
-    filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
-    filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / 2.01294825
-    filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
-    filtered_df
+    required_columns = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
+    # Check if all required columns are present in df
+    if all(col in df_cells.columns for col in required_columns):
+        filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
+    else:
+        # Get all columns in df_cells except for 'x' and 'y'
+        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
+        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
 
     filtered_df['Panel'] = panels_alignment[1]
     merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
