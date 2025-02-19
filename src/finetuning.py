@@ -204,7 +204,7 @@ def imageRegRigid(fixed,moving):
     R.SetOptimizerAsRegularStepGradientDescent(
         learningRate=2.0,
         minStep=1e-4,
-        numberOfIterations=5000,
+        numberOfIterations=1000,
         gradientMagnitudeTolerance=1e-8,
     )
     R.SetOptimizerScalesFromIndexShift()
@@ -299,30 +299,34 @@ def imageRegBspline(fixed,moving,transformDomainMeshSize,spline_order,metric):
 
 
 
-def getLabels(tif_tags):
+def getLabels(tif_tags, nb_channels):
     substr = "<ScanColorTable-k>"
     start = 0
-    strings = []
-    while True:
-        start = tif_tags['ImageDescription'].find(substr, start)
-        if start == -1: # when '<ScanColorTable-k>' is not found
-            break
-        string = tif_tags['ImageDescription'][start+18:start+26]
-        strings.append(string)
-        start += 1
-    marquages = []
-    wl = []
-    for s in strings:
-        if s.startswith('DAPI'):
-            marquages.append(s[0:4])
-            wl.append('450')
-        if s.startswith('Opal'):
-            marquages.append(s)
-            wl.append(s[5:])
-            
-    dictionary = {key: value for key, value in enumerate(wl)}
-    # change to detailled list
-    channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
+    if tif_tags['ImageDescription'].find(substr, start) != -1:  
+        strings = []
+        while True:
+            start = tif_tags['ImageDescription'].find(substr, start)
+            if start == -1: # when '<ScanColorTable-k>' is not found
+                break
+            string = tif_tags['ImageDescription'][start+18:start+26]
+            strings.append(string)
+            start += 1
+        marquages = []
+        wl = []
+        for s in strings:
+            if s.startswith('DAPI'):
+                marquages.append(s[0:4])
+                wl.append('450')
+            if s.startswith('Opal'):
+                marquages.append(s)
+                wl.append(s[5:])
+                
+        dictionary = {key: value for key, value in enumerate(wl)}
+        # change to detailled list
+        channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
+    else:
+        dictionary = {'DAPI': '450'}
+        channel_list = ['450 (channel DAPI)']
 
     return channel_list, dictionary
 
@@ -334,13 +338,24 @@ def load_QPTIFF_high_res(path):
         for tag in tif.pages[0].tags.values():
             name, value = tag.name, tag.value
             tif_tags[name] = value
+        # get nb of channels
+        last_indexes = 10
+        im_sizes = []
+        for im in tif.pages[-last_indexes:]:  
+            im_sizes.append(len(im.asarray()))
+        from collections import Counter
+        count_dict = Counter(im_sizes)
+        nb_channels = max(count_dict.values())
         # Load array with every channel
-        index_first_channel_second_downscaling = 8+1+8 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation) to get to the first channel of the second downscaling
-        index_last_channel_second_downscaling = 8+1+8+8 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation), 8 channels (second downscaling of the pyramid representation) to get to the last channel of the second downscaling
+        index_first_channel_second_downscaling = nb_channels*2+1 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation) to get to the first channel of the second downscaling
+        index_last_channel_second_downscaling = nb_channels*3+1 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation), 8 channels (second downscaling of the pyramid representation) to get to the last channel of the second downscaling
         img_data = np.stack([tif.pages[i].asarray() for i in range(index_first_channel_second_downscaling, index_last_channel_second_downscaling)], axis=0)
+        print(img_data.shape)
         # img_data = tif.series[0].asarray()
         
-    channel_list, channel_name_dictionary = getLabels(tif_tags)
+    channel_list, channel_name_dictionary = getLabels(tif_tags, nb_channels)
+    print(channel_list)
+    print(channel_name_dictionary)
     
     return img_data, tif_tags, channel_list, channel_name_dictionary
 
@@ -370,6 +385,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     print(f"Loading .qptiff images...")
     img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_high_res_imgs(scan_path1, scan_path2, id, name_alignment)
     scale_percent1_napari = img1_resize.shape[0] / img1_data.shape[1]
+    print(img1_data.shape)
     scale_percent2_napari = img2_resize.shape[0] / img2_data.shape[1]
     print(f"Mirrored cursor visualization for alignment {name_alignment}")
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
@@ -396,33 +412,33 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
 
     viewer1 = napari.Viewer()
     for i in range(len(channel_list1)):
-        wavelength = int(channel_name_dictionary1[i])
+        wavelength = int(list(channel_name_dictionary1.values())[i])
         rgb_values = wavelength_to_rgb(wavelength)
         colorMap = vispy.color.Colormap([[0.0, 0.0, 0.0], rgb_values])
         if full_res:
             rlayer = viewer1.add_image([img1_data[i],
                                        img1_data[i][::4, ::4],
                                        img1_data[i][::8, ::8]],
-                                       name=channel_name_dictionary1[i], contrast_limits=[0, 255])
+                                       name=channel_list1[i], contrast_limits=[0, 255])
         else:
             rlayer = viewer1.add_image(img1_data[i],
-                           name=channel_name_dictionary1[i], contrast_limits=[0, 255])
+                           name=channel_list1[i], contrast_limits=[0, 255])
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap
         
     viewer2 = napari.Viewer()
     for i in range(len(channel_list2)):
-        wavelength = int(channel_name_dictionary2[i])
+        wavelength = int(list(channel_name_dictionary2.values())[i])
         rgb_values = wavelength_to_rgb(wavelength)
         colorMap = vispy.color.Colormap([[0.0, 0.0, 0.0], rgb_values])
         if full_res:
             rlayer = viewer2.add_image([img2_data[i],
                                        img2_data[i][::4, ::4],
                                        img2_data[i][::8, ::8]],
-                                       name=channel_name_dictionary2[i], contrast_limits=[0, 255])
+                                       name=channel_list2[i], contrast_limits=[0, 255])
         else:
             rlayer = viewer2.add_image(img2_data[i],
-                           name=channel_name_dictionary2[i], contrast_limits=[0, 255])
+                           name=channel_list2[i], contrast_limits=[0, 255])
         
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap

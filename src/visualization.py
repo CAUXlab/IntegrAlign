@@ -13,6 +13,7 @@ import base64
 import json
 import numpy as np
 import scipy.ndimage
+from collections import Counter
 
 
 from src.alignment import get_annotations, get_gdf
@@ -161,22 +162,26 @@ def load_compressed_img(path_scan):
         im_sizes = []
         for im in tif.pages[-last_indexes:]:  
             im_sizes.append(len(im.asarray()))
-        from collections import Counter
-        count_dict = Counter(im_sizes)
-        nb_channels = max(count_dict.values())
-        most_comp_DAPI_index = len(tif.pages) - nb_channels+2
-        img_resized = tif.pages[most_comp_DAPI_index].asarray()
+            
+        count_dict = Counter(im_sizes)  # Count occurrences of each size
+        nb_channels = max(count_dict.values())  # Most frequent count
+        most_frequent_size = max(count_dict, key=count_dict.get)  # Get the most frequent size
+        # Find indices of channels
+        indices = [i for i, size in enumerate(im_sizes) if size == most_frequent_size]
+        indices  = [x - last_indexes for x in indices]
+        index_DAPI = min(indices)
+        img_resize = tif.pages[index_DAPI].asarray()
         # Get scale_percent
         tif_tags= {}
         for tag in tif.pages[0].tags.values():
             name, value = tag.name, tag.value
             tif_tags[name] = value
-        scale_percent = img_resized.shape[0] / tif_tags['ImageLength']
+        scale_percent = img_resize.shape[0] / tif_tags['ImageLength']
 
     elif path_scan.endswith('.tif'):
         tif = TiffFile(path_scan, is_ome=False)
         # Load the most compressed DAPI image in .levels
-        img_resized = tif.series[0].levels[-1].asarray()[0]
+        img_resize = tif.series[0].levels[-1].asarray()[0]
         # img_resized = rotate_array(img_resized, 180)  # Rotate
         # Get scale percent from full res image and compressed image sizes
         xml = tiffcomment(path_scan)
@@ -184,7 +189,7 @@ def load_compressed_img(path_scan):
         sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
         scale_percent = int(sizeX[-1])/int(sizeX[0])
     
-    return img_resized, scale_percent
+    return img_resize, scale_percent
 
 
 

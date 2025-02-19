@@ -234,7 +234,7 @@ def imageRegRigid(fixed,moving):
     R.SetOptimizerAsRegularStepGradientDescent(
         learningRate=2.0,
         minStep=1e-4,
-        numberOfIterations=5000,
+        numberOfIterations=1000,
         gradientMagnitudeTolerance=1e-8,
     )
     R.SetOptimizerScalesFromIndexShift()
@@ -973,8 +973,13 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     outer_boundary = intersections_polygons.unary_union
     # Create a Polygon representing the inner boundary
     inner_boundary = merged_polygons.unary_union
+
     # Construct the mask by taking the difference between the outer boundary and inner boundary
-    mask = outer_boundary.difference(inner_boundary)
+    if inner_boundary:
+        mask = outer_boundary.difference(inner_boundary)
+    else:
+        print("No empty or artefact area.")
+        mask = outer_boundary
     
     # Plot the MultiPolygon
     # plot_multipolygon(mask)
@@ -1252,7 +1257,7 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
     else:
         # Get all columns in df_cells except for 'x' and 'y'
-        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
+        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin', 'XMax', 'YMin', 'YMax']]
         filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
@@ -1264,11 +1269,12 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
 
 
 def save_tables(merged_cell_coordinates, output_path, id):
-    merged_cell_coordinates["label"] = merged_cell_coordinates.index
-    merged_cell_coordinates.rename(columns={"Classifier Label": "Classifier_Label"}, inplace=True)
-    merged_cell_coordinates.drop(columns=["Object Id"], inplace=True)
-    print("Combined phenotypes:")
-    print(np.unique(merged_cell_coordinates['Cell_type']))
+    if 'Cell_type' in merged_cell_coordinates.columns:
+        merged_cell_coordinates["label"] = merged_cell_coordinates.index
+        merged_cell_coordinates.rename(columns={"Classifier Label": "Classifier_Label"}, inplace=True)
+        merged_cell_coordinates.drop(columns=["Object Id"], inplace=True)
+        print("Combined phenotypes:")
+        print(np.unique(merged_cell_coordinates['Cell_type']))
 
     merged_cell_coordinates.to_csv(output_path + f"Alignment/merged_tables/{id}_merged_cell_coordinates.csv", index=False)
 
