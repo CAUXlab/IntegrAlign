@@ -13,25 +13,100 @@ from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import FormulaRule
 from collections import Counter
 
+from src.utils.cropping import ImageCropperApp
+import tkinter as tk
+import matplotlib.pyplot as plt
+import os
+from src.alignment import get_annotations, rotate_coordinates
+from shapely.geometry import Polygon
+import copy
+
 
 def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
     ## Get the parameters for alignment
-    folder_paths, common_ids, panels, output_path, turn_img_id_dict = get_parameters(params_file_path, rotation_params, excluded_ids)
+    scans_paths, annotations_paths, common_ids, panels_all, output_path, turn_img_id_dict = get_parameters(params_file_path, rotation_params, excluded_ids)
     ## Get the name of the panels for each alignment (with reference panel at the end)
     data_dict = {}
-    panel_alignment_dict = panels_name_alignment(panels, folder_paths)
+    panel_alignment_dict = panels_name_alignment(panels_all, scans_paths)
 
     unique_name_alignments = set()
     for id in tqdm(common_ids, desc="Loading downscaled images", unit="Patient"):
         data_dict[id] = {}  # Initialize sub-dictionary for this patient
-        for name_alignment, folder_alignment_paths in panel_alignment_dict.items():
+        for name_alignment, scans_alignment_paths in panel_alignment_dict.items():
+            panels = name_alignment.split('_')
             # Add the name_alignment to the set (sets automatically handle uniqueness)
             unique_name_alignments.add(name_alignment)
-            folder_path1, folder_path2 = [path for path in folder_alignment_paths]
+            scans_path1, scans_path2 = [path for path in scans_alignment_paths]
             # Load imgs downscaled and metadata
             (tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, 
             tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, 
-            img1, img2, img1_resize, img2_resize) = load_downscaled_imgs(folder_path1, folder_path2, id, name_alignment, turn_img_id_dict)
+            img1, img2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori) = load_downscaled_imgs(scans_path1, scans_path2, id, panels, turn_img_id_dict)
+
+
+            annotations_resized = []
+            for panel in panels:
+                # Get the panel path
+                index = panels_all.index(panel)
+                annotations = annotations_paths[index]
+                # Get the file path corresponding to id
+                # Get annotations
+                artefacts_empty_alignment = {}
+                analysis_area_alignment = {}
+                geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                ## Get the annotations
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+                analysis_area_gdf_poly = analysis_area_alignment[panel]
+                operation = turn_img_id_dict[f'{id}_{panel}']
+                if index == 0:
+                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, operation, image_shape = img1_resize.shape, img_resize = img1_resize)
+                    annotations_resized.append(analysis_area_polygons)
+                else:
+                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent2, operation, image_shape = img2_resize.shape, img_resize = img2_resize)
+                    annotations_resized.append(analysis_area_polygons)
+                
+
+            root = tk.Tk()
+            app = ImageCropperApp(root, img1_resize, img2_resize, panels, annotations_resized)
+            root.mainloop()
+            if app.saved:
+                cropped_images_dict = app.cropped_images
+                if panels[0] in cropped_images_dict:
+                    img1_resize = cropped_images_dict[panels[0]][0]
+                    # Convert to sitk image format
+                    img1 = sitk.GetImageFromArray(img1_resize)
+                    # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
+                    crop_coords1 = cropped_images_dict[panels[0]][1]
+                else:
+                    crop_coords1 = (0, 0)
+                if panels[1] in cropped_images_dict:
+                    img2_resize = cropped_images_dict[panels[1]][0]
+                    # Convert to sitk image format
+                    img2 = sitk.GetImageFromArray(img2_resize)
+                    # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
+                    crop_coords2 = cropped_images_dict[panels[1]][1]
+                else:
+                    crop_coords2 = (0, 0)
+            else:
+                crop_coords1 = (0, 0)
+                crop_coords2 = (0, 0)
+
+            
+            '''
+            if app.saved:
+                cropped_images_dict = app.cropped_images
+                img1_resize = cropped_images_dict[panels[0]][0]
+                img2_resize = cropped_images_dict[panels[1]][0]
+                # Convert to sitk image format
+                img1 = sitk.GetImageFromArray(img1_resize)
+                img2 = sitk.GetImageFromArray(img2_resize)
+                # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
+                crop_coords1 = cropped_images_dict[panels[0]][1]
+                crop_coords2 = cropped_images_dict[panels[1]][1]
+            else:
+                crop_coords1 = (0, 0)
+                crop_coords2 = (0, 0)
+            '''
+
             data_dict[id][name_alignment] = {
                 "tif_tags1": tif_tags1,
                 "channel_list1": channel_list1,
@@ -45,9 +120,15 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
                 "img2": img2,
                 "img1_resize": img1_resize,
                 "img2_resize": img2_resize,
+                "crop_coords1": crop_coords1,
+                "crop_coords2": crop_coords2,
+                "img1_resize_ori": img1_resize_ori,
+                "img2_resize_ori": img2_resize_ori,
+                "img1_shape_ori": img1_resize_ori.shape,
+                "img2_shape_ori": img2_resize_ori.shape,
             }
     # Add params
-    data_dict["params"] = {"common_ids" : common_ids, "panels" : panels, "output_path" : output_path, "turn_img_id_dict" : turn_img_id_dict}
+    data_dict["params"] = {"common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path, "turn_img_id_dict" : turn_img_id_dict}
     # Save the dictionary to a file
     with open(output_path + "downscaled_images.pkl", "wb") as file:
         pickle.dump(data_dict, file)
@@ -144,7 +225,8 @@ def get_parameters(params_file_path, rotation_params, excluded_ids):
     # Load parameters
     with open(params_file_path, "r") as infile:
         params_dict = json.load(infile)
-    folder_paths = params_dict.get("folder_paths")
+    scans_paths = params_dict.get("scans_paths")
+    annotations_paths = params_dict.get("annotations_paths")
     common_ids = params_dict.get("common_ids")
     panels = params_dict.get("panels")
     output_path = params_dict.get("output_path")
@@ -160,7 +242,7 @@ def get_parameters(params_file_path, rotation_params, excluded_ids):
         # Assign the new value to correponding key
         turn_img_id_dict[key] = int(value)  # Convert string to integer
     
-    return folder_paths, common_ids, panels, output_path, turn_img_id_dict
+    return scans_paths, annotations_paths, common_ids, panels, output_path, turn_img_id_dict
 
 def panels_name_alignment(panels, folder_paths):
     ''' Get the name of the panels and corresponding folder for each alignment. '''
@@ -176,9 +258,8 @@ def panels_name_alignment(panels, folder_paths):
     
     return panel_alignment_dict
 
-def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, turn_img_id_dict):
+def load_downscaled_imgs(folder_path1, folder_path2, id, panels, turn_img_id_dict):
     # Define path of the qptiff
-    panels = folder_name_alignment.split('_')
     path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
     path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
     # print("path1:", path1)
@@ -200,11 +281,11 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, 
         while comp_lvl2 < comp_lvl1:
             index_DAPI1_last = index_DAPI1
             index_DAPI1 -= nb_channels1
-            shape_channels = np.unique([len(im.asarray()) for im in tif.pages][index_DAPI1:index_DAPI1_last])
+            shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI1:index_DAPI1_last]])
             while len(shape_channels) > 1:
                 index_DAPI1_last+=1
                 index_DAPI1+=1
-                shape_channels = np.unique([len(im.asarray()) for im in tif.pages][index_DAPI1:index_DAPI1_last])
+                shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI1:index_DAPI1_last]])
             img1_resize = tif.pages[index_DAPI1].asarray()
             scale_percent1 = img1_resize.shape[0] / tif_tags1['ImageLength']
             comp_lvl1 = int((1/scale_percent1))
@@ -217,11 +298,11 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, 
         while comp_lvl1 < comp_lvl2:
             index_DAPI2_last = index_DAPI2
             index_DAPI2 -= nb_channels2
-            shape_channels = np.unique([len(im.asarray()) for im in tif.pages][index_DAPI2:index_DAPI2_last])
+            shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI2:index_DAPI2_last]])
             while len(shape_channels) > 1:
                 index_DAPI2_last+=1
                 index_DAPI2+=1
-                shape_channels = np.unique([len(im.asarray()) for im in tif.pages][index_DAPI2:index_DAPI2_last])
+                shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI2:index_DAPI2_last]])
             img2_resize = tif.pages[index_DAPI2].asarray()
             scale_percent2 = img2_resize.shape[0] / tif_tags2['ImageLength']
             comp_lvl2 = int((1/scale_percent2))
@@ -233,9 +314,13 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, 
     img1_8bit = cv2.convertScaleAbs(img1_resize)
     img2_8bit = cv2.convertScaleAbs(img2_resize)
 
+    img1_resize_ori = copy.deepcopy(img1_8bit)
+    img2_resize_ori = copy.deepcopy(img2_8bit)
+
     # Rotate or not the first image
     img1_8bit = transform_image(img1_8bit, turn_img_id_dict[id + "_" + panels[0]])
     img2_8bit = transform_image(img2_8bit, turn_img_id_dict[id + "_" + panels[1]])
+
 
     # Convert to sitk image format
     img1 = sitk.GetImageFromArray(img1_8bit)
@@ -247,7 +332,7 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, folder_name_alignment, 
     img1_arr = sitk.GetArrayFromImage(img1)
     img2_arr = sitk.GetArrayFromImage(img2)
 
-    return tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, img1, img2, img1_arr, img2_arr
+    return tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, img1, img2, img1_arr, img2_arr, img1_resize_ori, img2_resize_ori
 
 
 def get_data_alignment(path_qptiff):
@@ -332,3 +417,56 @@ def getLabels(tif_tags):
     channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
 
     return channel_list, dictionary
+
+
+
+def get_polygon(gdf, scale_percent, operation, image_shape, img_resize = None, c = "R"):
+    annotation = []
+    for geometry in gdf.geometry:
+        if geometry.geom_type == 'Polygon':
+            annotation.append(np.array(geometry.exterior.coords))
+            for hole in geometry.interiors:
+                annotation.append(np.array(hole.coords))
+        elif geometry.geom_type == 'MultiPolygon':
+            for part in geometry:
+                annotation.append(np.array(part.exterior.coords))
+                for hole in part.interiors:
+                    annotation.append(np.array(hole.coords))
+    
+    # Convert to polygon object
+    polygons = []
+    for array in annotation:
+        scaled_points = array*scale_percent
+        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
+        scaled_points = rotate_coordinates(scaled_points, operation, image_shape)
+        # Convert array to list of tuples
+        points = [(x, y) for x, y in scaled_points]
+        
+        # Create Polygon object
+        polygons.append(Polygon(points))
+
+    return polygons
+
+
+def shift_annotations(annotations, crop_coords):
+    """
+    Shifts the coordinates of polygons in annotations by the given crop_coords2.
+    Then, plots the shifted polygons.
+
+    Parameters:
+    - annotations (list): A list where the second element is a list of polygons.
+    - crop_coords (tuple): The (x, y) shift to be applied to the polygons.
+    """
+    shift_x, shift_y = crop_coords  # Extract the shift values
+    shifted_polygons = []
+
+    # Iterate through each polygon in annotations
+    for polygon in annotations:
+        # Shift all points in the polygon by the crop_coords2 shift
+        shifted_polygon = [(x - shift_x, y - shift_y) for x, y in zip(polygon.exterior.xy[0], polygon.exterior.xy[1])]
+        # Create a new Polygon with the shifted coordinates
+        shifted_polygon = Polygon(shifted_polygon)
+        shifted_polygons.append(shifted_polygon)
+
+    return shifted_polygons
+

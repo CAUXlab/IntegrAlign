@@ -1,4 +1,4 @@
-from src.utils import parse_arguments
+from src.utils.args import parse_arguments
 from src.visualization import visualization
 from src.save_images import save_downscaled_images
 from src.alignment import alignment

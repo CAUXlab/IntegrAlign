@@ -146,14 +146,19 @@ def extract_downscaled_images(downscaled_images_id_name_alignment, panels, name_
         f"channel_list_{panel1}": downscaled_images_id_name_alignment.get("channel_list1"),
         f"channel_name_dictionary_{panel1}": downscaled_images_id_name_alignment.get("channel_name_dictionary1"),
         f"scale_percent_{panel1}": downscaled_images_id_name_alignment.get("scale_percent1"),
-        f"image_shape_{panel1}": img1_resize.shape,
         f"turn_img_{panel1}": turn_img_id_dict[id + "_" + panel1],
+        f"crop_coords_{panel1}": downscaled_images_id_name_alignment.get("crop_coords1"),
+        f"img_resize_ori_{panel1}": downscaled_images_id_name_alignment.get("img1_resize_ori"),
+        f"image_shape_{panel1}": downscaled_images_id_name_alignment.get("img1_shape_ori"),
+
         f"tif_tags_{panel2}": downscaled_images_id_name_alignment.get("tif_tags2"),
         f"channel_list_{panel2}": downscaled_images_id_name_alignment.get("channel_list2"),
         f"channel_name_dictionary_{panel2}": downscaled_images_id_name_alignment.get("channel_name_dictionary2"),
         f"scale_percent_{panel2}": downscaled_images_id_name_alignment.get("scale_percent2"),
-        f"image_shape_{panel2}": img2_resize.shape,
-        f"turn_img_{panel2}": turn_img_id_dict[id + "_" + panel2]
+        f"turn_img_{panel2}": turn_img_id_dict[id + "_" + panel2],
+        f"crop_coords_{panel2}": downscaled_images_id_name_alignment.get("crop_coords2"),
+        f"img_resize_ori_{panel2}": downscaled_images_id_name_alignment.get("img2_resize_ori"),
+        f"image_shape_{panel2}": downscaled_images_id_name_alignment.get("img2_shape_ori"),
     }
 
     return metadata_images, img1, img2, img1_resize, img2_resize
@@ -579,11 +584,15 @@ def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_imag
     image_shape2 = metadata_images[name_alignment][f'image_shape_{panels[1]}']
     operation1 = metadata_images[name_alignment][f'turn_img_{panels[0]}']
     operation2 = metadata_images[name_alignment][f'turn_img_{panels[1]}']
+    crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels[0]}']
+    crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels[1]}']
+    img1_resize_ori = metadata_images[name_alignment][f'img_resize_ori_{panels[0]}']
+    img2_resize_ori = metadata_images[name_alignment][f'img_resize_ori_{panels[1]}']
     coords1 = cell_coordinates[f'{panels[0]}_panel_DAPI']
     coords2 = cell_coordinates[f'{panels[1]}_panel_DAPI']
     label1 = f'DAPI from panel {panels[0]}'
     label2 = f'DAPI {panels[1]}'
-    plot_correlation, correlations = correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2)
+    plot_correlation, correlations = correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori)
 
 
     best_ms = max(correlations, key=correlations.get)
@@ -771,7 +780,7 @@ def grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_
     return axs
 
 
-def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2):
+def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
     correlations = {}
     num_images = len(outTx_Bspline_dict)
     num_cols = num_images
@@ -785,7 +794,7 @@ def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, 
     for ax, (ms, outTx_Bspline) in zip(axes, outTx_Bspline_dict.items()):
         # print(ms)
 
-        coords1_tr = transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2)
+        coords1_tr = transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori)
     
         # Créer les rasters avec une taille fixe
         min_x = min(np.min(coords1_tr[:, 0]), np.min(coords2[:, 0])) - 1000
@@ -835,21 +844,78 @@ def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, 
 
     return plot_correlation, correlations
     
-def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2):
+def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
     scaled_points1 = coords1*scale_percent1
+
+
+    # Load and display the image
+    plt.imshow(img1_resize_ori, cmap="Blues")
+
+    # Plot points with increased size (adjust "s" for desired size)
+    plt.scatter(scaled_points1[:, 0], scaled_points1[:, 1], 
+                color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
+    plt.show()
+
+
     # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
     scaled_points1 = rotate_coordinates(scaled_points1, operation1, image_shape1)
+    # Shift coords if cropping has been done on the first image
+    scaled_points1 = shift_coordinates(scaled_points1, crop_coords1)
+
     
     # Transform scaled points 1 in the coordinate system of slide 2
     scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points1])
     scaled_pointsTR = np.array([list(outTx_Rigid.TransformPoint(point)) for point in scaled_pointsTR_tmp])
 
-    # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-    scaled_pointsTR = rotate_coordinates(scaled_pointsTR, operation2, image_shape2)
+
+    # Load and display the image
+    plt.imshow(img2_resize, cmap="Reds")
+    # Plot points with increased size (adjust "s" for desired size)
+    plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
+                color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
+    plt.show()
+
+    # Shift coords back if cropping has been done on the second image
+    scaled_pointsTR = shift_back_coordinates(scaled_pointsTR, crop_coords2)
+
+    # Load and display the image
+    plt.imshow(img2_resize_ori, cmap="Reds")
+    # Plot points with increased size (adjust "s" for desired size)
+    plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
+                color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
+    plt.show()
+
+    # Transform back coordinates regarding the induced rotation that as been done
+    scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
+
+    # Load and display the image
+    plt.imshow(img2_resize_ori, cmap="Reds")
+    # Plot points with increased size (adjust "s" for desired size)
+    plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
+                color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
+    plt.show()
+
+    
     # Scale back to the full size image
-    coords1_tr = scaled_pointsTR/scale_percent1
+    coords1_tr = scaled_pointsTR/scale_percent2
+
+    
 
     return coords1_tr
+
+def shift_coordinates(coords, crop_coords):
+    """Applies the shift induced by cropping to coordinates as is done to the image."""
+    shift_x, shift_y = crop_coords  
+    shifted_coords = np.array([[point[0] - shift_x, point[1] - shift_y] for point in coords])
+
+    return shifted_coords
+
+def shift_back_coordinates(coords, crop_coords):
+    """Applies the INVERSE of the shift induced by cropping to coordinates to get back to the original image."""
+    shift_x, shift_y = crop_coords  
+    shifted_coords = np.array([[point[0] + shift_x, point[1] + shift_y] for point in coords])
+
+    return shifted_coords
 
 # Create a raster from a set of points
 def create_raster_from_points(points, pixel_size, min_x, max_x, min_y, max_y):
@@ -887,6 +953,25 @@ def rotate_coordinates(coords, operation, image_shape):
     
     return new_coords
 
+def rotate_back_coordinates(coords, operation, image_shape):
+    """Applies the INVERSE transformation to coordinates to get back to the original image."""
+    height, width = image_shape[:2]
+    
+    if operation == 3:
+        # Rotate clockwise by 90 degrees: (x, y) -> (y, -x)
+        new_coords = np.column_stack((coords[:, 1], height - coords[:, 0]))
+    elif operation == 2:
+        # Flip left-right and up-down: (x, y) -> (-x, -y)
+        new_coords = np.column_stack((width - coords[:, 0], height - coords[:, 1]))
+    elif operation == 1:
+        # Rotate counterclockwise by 90 degrees: (x, y) -> (-y, x)
+        new_coords = np.column_stack((width - coords[:, 1], coords[:, 0]))
+    else:
+        # No operation, return coordinates as is
+        new_coords = coords
+    
+    return new_coords
+
 
 
 def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path):
@@ -901,19 +986,21 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
             scale_percent1 = metadata_images[name_alignment][f'scale_percent_{panel}']
             image_shape1 = metadata_images[name_alignment][f'image_shape_{panel}']
             operation1 = metadata_images[name_alignment][f'turn_img_{panel}']
+            crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panel}']
             img_resize1 = img_resize_alignment[panel]
             ## Scale annotations to downscaled image resolution
-            artefacts_empty_array = get_gdf(artefacts_empty_gdf_poly, scale_percent1, operation1, image_shape1, img_resize1, c="B")
-            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent1, operation1, image_shape1, img_resize1, c="B")
+            artefacts_empty_array = get_gdf(artefacts_empty_gdf_poly, scale_percent1, operation1, crop_coords1, image_shape1, img_resize1, c="B")
+            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent1, operation1, crop_coords1, image_shape1, img_resize1, c="B")
             ## Transform scaled annotations to downscaled reference image
             scale_percent2 = metadata_images[name_alignment][f'scale_percent_{reference_panel}']
             image_shape2 = metadata_images[name_alignment][f'image_shape_{reference_panel}']
             operation2 = metadata_images[name_alignment][f'turn_img_{reference_panel}']
+            crop_coords2 = metadata_images[name_alignment][f'crop_coords_{reference_panel}']
             img_resize2 = img_resize_alignment[reference_panel]
             outTx_Rigid = outTx_Rigid_alignment[panel]
             outTx_Bspline = outTx_Bspline_alignment[panel]
-            artefacts_empty_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(artefacts_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img_resize2)
-            analysis_area_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(analysis_area_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img_resize2)
+            artefacts_empty_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(artefacts_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img_resize2)
+            analysis_area_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(analysis_area_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img_resize2)
 
 
     ## Fix invalid geometries in artefacts and empty annotations
@@ -994,7 +1081,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
 
 
 
-def get_gdf(gdf, scale_percent, operation, image_shape, img_resize = None, c = "R"):
+def get_gdf(gdf, scale_percent, operation, crop_coords, image_shape, img_resize = None, c = "R"):
     annotation = []
     for geometry in gdf.geometry:
         if geometry.geom_type == 'Polygon':
@@ -1013,6 +1100,8 @@ def get_gdf(gdf, scale_percent, operation, image_shape, img_resize = None, c = "
         scaled_points = array*scale_percent
         # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
         scaled_points = rotate_coordinates(scaled_points, operation, image_shape)
+        # Shift coords if cropping has been done on the first image
+        scaled_points = shift_coordinates(scaled_points, crop_coords)
         # Convert array to list of tuples
         points = [(x, y) for x, y in scaled_points]
         
@@ -1034,11 +1123,32 @@ def get_gdf(gdf, scale_percent, operation, image_shape, img_resize = None, c = "
 
 
 
-def transform_annotation(annotations, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img_resize):
+def transform_annotation(annotations, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img_resize):
     
     # Transform Shapes from IF2 to IF3 coordinate system
     annotation_TR= []
     for shape in annotations:
+
+        scaled_points = shape*scale_percent1
+        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
+        scaled_points = rotate_coordinates(scaled_points, operation1, image_shape1)
+        # Shift coords if cropping has been done on the first image
+        scaled_points = shift_coordinates(scaled_points, crop_coords1)
+
+        
+        # Transform scaled points 1 in the coordinate system of slide 2
+        scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points])
+        scaled_pointsTR = np.array([list(outTx_Rigid.TransformPoint(point)) for point in scaled_pointsTR_tmp])
+
+        # Shift coords back if cropping has been done on the second image
+        scaled_pointsTR = shift_back_coordinates(scaled_pointsTR, crop_coords2)
+        # Transform back coordinates regarding the induced rotation that as been done
+        scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
+        # Scale back to the full size image
+        annotation_TR.append(scaled_pointsTR/scale_percent2)
+
+
+        '''
         scaled_points = shape*scale_percent1
         # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
         scaled_points = rotate_coordinates(scaled_points, operation1, image_shape1)
@@ -1051,18 +1161,23 @@ def transform_annotation(annotations, scale_percent1, scale_percent2, image_shap
         scaled_pointsTR = rotate_coordinates(scaled_pointsTR, operation2, image_shape2)
         # Scale back to the full size image
         annotation_TR.append(scaled_pointsTR/scale_percent2)
+        '''
     
+
+    '''
     # Convert to polygon object
     polygonsTR = []
     for array in annotation_TR:
         scaled_points = array*scale_percent2
         # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
         scaled_points = rotate_coordinates(scaled_points, operation2, image_shape2)
+        # Shift coords if cropping has been done on the first image
+        scaled_points = shift_coordinates(scaled_points, crop_coords2)
         # Convert array to list of tuples
         points = [(x, y) for x, y in scaled_points]
         # Create Polygon object
         polygonsTR.append(Polygon(points))
-    '''
+
     plt.imshow(img_resize, cmap="Reds")
     # Plot the polygon
     for polygon in polygonsTR:
@@ -1070,6 +1185,8 @@ def transform_annotation(annotations, scale_percent1, scale_percent2, image_shap
         plt.fill(*polygon.exterior.xy, color='gray', alpha=0.5)
     plt.show()
     '''
+
+
 
     polygons = [Polygon(coords) for coords in annotation_TR]
     geo_series = gpd.GeoSeries(polygons)
@@ -1148,10 +1265,12 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     scale_percent1 = metadata_images[name_alignment][f'scale_percent_{panels_alignment[0]}']
     image_shape1 = metadata_images[name_alignment][f'image_shape_{panels_alignment[0]}']
     operation1 = metadata_images[name_alignment][f'turn_img_{panels_alignment[0]}']
+    crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
 
     scale_percent2 = metadata_images[name_alignment][f'scale_percent_{panels_alignment[1]}']
     image_shape2 = metadata_images[name_alignment][f'image_shape_{panels_alignment[1]}']
     operation2 = metadata_images[name_alignment][f'turn_img_{panels_alignment[1]}']
+    crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[1]}']
 
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
     outTx_Bspline = outTx_Bspline_alignment[panels_alignment[0]]
@@ -1163,13 +1282,17 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     scaled_points = coords*scale_percent1
     # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
     scaled_points = rotate_coordinates(scaled_points, operation1, image_shape1)
+    # Shift coords if cropping has been done on the first image
+    scaled_points = shift_coordinates(scaled_points, crop_coords1)
 
     # Transform scaled points 1 in the coordinate system of slide 2
     scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points])
     scaled_pointsTR = np.array([list(outTx_Rigid.TransformPoint(point)) for point in scaled_pointsTR_tmp])
     
-    # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-    scaled_pointsTR = rotate_coordinates(scaled_pointsTR, operation2, image_shape2)
+    # Shift coords back if cropping has been done on the second image
+    scaled_pointsTR = shift_back_coordinates(scaled_pointsTR, crop_coords2)
+    # Transform back coordinates regarding the induced rotation that as been done
+    scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
     # Scale back to the full size image
     coords_tr = scaled_pointsTR/scale_percent2
     cell_coordinates[f'{panels_alignment[0]}_panel_DAPI_transformed'] = coords_tr
@@ -1351,11 +1474,13 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
         for coords_set in coords
     ]
     # Compute the pearson correlation between rasters
-    correlations = [
-        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
-        for i in range(len(rasters))
-        for j in range(i + 1, len(rasters))
-    ]
+    correlations = []
+    correlation_texts = []
+    for i in range(len(rasters)):
+        for j in range(i + 1, len(rasters)):
+            corr = pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+            correlations.append(corr)
+            correlation_texts.append(f"Correlation {panels_all[i]}-{panels_all[j]}: {corr:.2f}")
     # Plot the rasters
     # Define colors and labels dynamically based on panels_all
     colors = ["blue", "green", "red"][:len(panels_all)]
@@ -1371,9 +1496,9 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.gca().invert_yaxis()
     plt.axis("off")
     plt.legend(handles=legend_patches, loc="upper right")
-    for idx, corr in enumerate(correlations):
-        i, j = divmod(idx, len(rasters))
-        plt.figtext(0.5, -0.05 * (idx + 1), f"Correlation {i + 1}-{j + 1} : {np.round(corr, 3)}", wrap=True, horizontalalignment="center", fontsize=12)
+    # Add correlations values
+    for idx, text in enumerate(correlation_texts):
+        plt.figtext(0.5, 0.05 + 0.05 * idx, text, fontsize=12, wrap=True, horizontalalignment="center")
     # Save the plot
     plt.savefig(output_path + f"Alignment/plots/{id}_raster_before_alignment.png", dpi=300, bbox_inches="tight")
     plt.close()
@@ -1448,11 +1573,13 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
         for c in all_coords
     ]
     # Compute the pearson correlation between rasters
-    correlations = [
-        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0] 
-        for i in range(len(rasters)) 
-        for j in range(i + 1, len(rasters))
-    ]
+    correlations = []
+    correlation_texts = []
+    for i in range(len(rasters)):
+        for j in range(i + 1, len(rasters)):
+            corr = pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+            correlations.append(corr)
+            correlation_texts.append(f"Correlation {panels_all[i]}-{panels_all[j]}: {corr:.2f}")
     # Create a new array with the same shape initialized to zeros
     new_array = np.zeros_like(rasters[0], dtype=np.uint8)
     # Apply the rules to create the new array
@@ -1476,8 +1603,9 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.axis('off')  # Turn off the axis
     plt.gca().invert_yaxis()
     plt.legend(handles=legends, loc='upper right')
-    for i, corr in enumerate(correlations):
-        plt.figtext(0.5, -0.05 * i, f"Correlation {i + 1}-{i + 2}: {np.round(corr, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
+    # Add correlations values
+    for idx, text in enumerate(correlation_texts):
+        plt.figtext(0.5, 0.05 + 0.05 * idx, text, fontsize=12, wrap=True, horizontalalignment="center")
     plt.savefig(output_path + f"Alignment/plots/{id}_common_raster.png", dpi=300, bbox_inches='tight')
     plt.close()
         
@@ -1551,11 +1679,13 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
         for c in coords
     ]
     # Compute the Pearson correlation between rasters
-    correlations = [
-        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
-        for i in range(len(rasters)) 
-        for j in range(i + 1, len(rasters))
-    ]
+    correlations = []
+    correlation_texts = []
+    for i in range(len(rasters)):
+        for j in range(i + 1, len(rasters)):
+            corr = pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+            correlations.append(corr)
+            correlation_texts.append(f"Correlation {panels_all[i]}-{panels_all[j]}: {corr:.2f}")
     # Create a new array with the same shape initialized to zeros
     new_array = np.zeros_like(rasters[0], dtype=np.uint8)
     # Apply the rules to create the new array
@@ -1578,8 +1708,9 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.axis('off')  # Turn off the axis
     plt.gca().invert_yaxis()
     plt.legend(handles=[legend1_patches, legend2_patches, legend3_patches], loc='upper right')
-    for i, corr in enumerate(correlations):
-        plt.figtext(0.5, -0.05 * i, f"Correlation {i + 1}-{i + 2}: {np.round(corr, 3)}", wrap=True, horizontalalignment='center', fontsize=12)
+    # Add correlations values
+    for idx, text in enumerate(correlation_texts):
+        plt.figtext(0.5, 0.05 + 0.05 * idx, text, fontsize=12, wrap=True, horizontalalignment="center")
     plt.savefig(output_path + f"Alignment/plots/{id}_common_raster_filtered_annotations.png", dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -1645,11 +1776,13 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
         for coords_set in coords
     ]
     # Compute the pearson correlation between rasters
-    correlations = [
-        pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
-        for i in range(len(rasters))
-        for j in range(i + 1, len(rasters))
-    ]
+    correlations = []
+    correlation_texts = []
+    for i in range(len(rasters)):
+        for j in range(i + 1, len(rasters)):
+            corr = pearsonr(rasters[i].flatten(), rasters[j].flatten())[0]
+            correlations.append(corr)
+            correlation_texts.append(f"Correlation {panels_all[i]}-{panels_all[j]}: {corr:.2f}")
     # Plot the rasters
     # Define colors and labels dynamically based on panels_all
     colors = ["blue", "green", "red"][:len(panels_all)]
@@ -1665,9 +1798,9 @@ def plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pi
     plt.gca().invert_yaxis()
     plt.axis("off")
     plt.legend(handles=legend_patches, loc="upper right")
-    for idx, corr in enumerate(correlations):
-        i, j = divmod(idx, len(rasters))
-        plt.figtext(0.5, -0.05 * (idx + 1), f"Correlation {i + 1}-{j + 1} : {np.round(corr, 3)}", wrap=True, horizontalalignment="center", fontsize=12)
+    # Add correlations values
+    for idx, text in enumerate(correlation_texts):
+        plt.figtext(0.5, 0.05 + 0.05 * idx, text, fontsize=12, wrap=True, horizontalalignment="center")
     # Save the plot
     plt.savefig(output_path + f"Alignment/plots/{id}_raster_alignment.png", dpi=300, bbox_inches="tight")
     plt.close()

@@ -124,7 +124,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotati
     for name_alignment in downscaled_images_id.keys():
         panels_alignment = name_alignment.split("_")
         merged_cell_coordinates = transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_cells, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, mask, resolution_micron, merged_cell_coordinates)
-    merged_cell_coordinates = filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, merged_cell_coordinates)
+    merged_cell_coordinates = filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates)
     ## Save new coordinates table
     save_tables(merged_cell_coordinates, output_path, id)
     ## Plot cell coordinates before and after alignment
@@ -350,19 +350,15 @@ def load_QPTIFF_high_res(path):
         index_first_channel_second_downscaling = nb_channels*2+1 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation) to get to the first channel of the second downscaling
         index_last_channel_second_downscaling = nb_channels*3+1 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation), 8 channels (second downscaling of the pyramid representation) to get to the last channel of the second downscaling
         img_data = np.stack([tif.pages[i].asarray() for i in range(index_first_channel_second_downscaling, index_last_channel_second_downscaling)], axis=0)
-        print(img_data.shape)
         # img_data = tif.series[0].asarray()
         
     channel_list, channel_name_dictionary = getLabels(tif_tags, nb_channels)
-    print(channel_list)
-    print(channel_name_dictionary)
     
     return img_data, tif_tags, channel_list, channel_name_dictionary
 
 
-def load_high_res_imgs(folder_path1, folder_path2, id, folder_name_alignment):
+def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     # Define path of the qptiff
-    panels = folder_name_alignment.split('_')
     path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
     path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
 
@@ -383,9 +379,9 @@ def load_high_res_imgs(folder_path1, folder_path2, id, folder_name_alignment):
 
 def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment = None, shapes_data_alignment=None, shapes_transformed=None, full_res=None):
     print(f"Loading .qptiff images...")
-    img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_high_res_imgs(scan_path1, scan_path2, id, name_alignment)
+    panels = name_alignment.split('_')
+    img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_high_res_imgs(scan_path1, scan_path2, id, panels)
     scale_percent1_napari = img1_resize.shape[0] / img1_data.shape[1]
-    print(img1_data.shape)
     scale_percent2_napari = img2_resize.shape[0] / img2_data.shape[1]
     print(f"Mirrored cursor visualization for alignment {name_alignment}")
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
@@ -400,6 +396,8 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     scale_percent2 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[1]}"]
     operation1 = metadata_images[name_alignment][f'turn_img_{panels_alignment[0]}']
     operation2 = metadata_images[name_alignment][f'turn_img_{panels_alignment[1]}']
+    crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
+    crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[1]}']
     image_shape1 = metadata_images[name_alignment][f'image_shape_{panels_alignment[0]}']
     image_shape2 = metadata_images[name_alignment][f'image_shape_{panels_alignment[1]}']
 
@@ -411,6 +409,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     
 
     viewer1 = napari.Viewer()
+    viewer1.title = panels[0]
     for i in range(len(channel_list1)):
         wavelength = int(list(channel_name_dictionary1.values())[i])
         rgb_values = wavelength_to_rgb(wavelength)
@@ -427,6 +426,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         rlayer.colormap = colorMap
         
     viewer2 = napari.Viewer()
+    viewer2.title = panels[1]
     for i in range(len(channel_list2)):
         wavelength = int(list(channel_name_dictionary2.values())[i])
         rgb_values = wavelength_to_rgb(wavelength)
@@ -591,9 +591,9 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         manual_empty_geometries = gpd.GeoSeries(polygons)
 
         ## Scale annotations to downscaled image resolution
-        manual_empty_array = get_gdf(manual_empty_geometries, scale_percent1_napari, operation1, image_shape1, img1_resize, c="B")
+        manual_empty_array = get_gdf(manual_empty_geometries, scale_percent1_napari, operation1, crop_coords1, image_shape1, img1_resize, c="B")
         # First scale with scale percent of the second downscaling (for napari visualization) and second scale with the scale percent of the full resolution image to get back to the resolution of the coordinates in pixel
-        manual_empty_alignment[f'{panels_alignment[0]}_in_{panels_alignment[1]}_panel'] = transform_annotation(manual_empty_array, scale_percent1_napari, scale_percent2, image_shape1, image_shape2, operation1, operation2, outTx_Rigid, outTx_Bspline, img2_resize)
+        manual_empty_alignment[f'{panels_alignment[0]}_in_{panels_alignment[1]}_panel'] = transform_annotation(manual_empty_array, scale_percent1_napari, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img2_resize)
 
 
     return manual_empty_alignment
@@ -696,7 +696,11 @@ def merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, 
     inner_boundary = merged_polygons.unary_union
 
     # Construct the mask by taking the difference between the outer boundary and inner boundary
-    mask = mask.difference(inner_boundary)
+    if inner_boundary:
+        mask = mask.difference(inner_boundary)
+    else:
+        print("No empty or artefact area.")
+        mask = mask
 
     # Plot the MultiPolygon
     # plot_multipolygon(mask)
