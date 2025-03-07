@@ -847,7 +847,7 @@ def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, 
 def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
     scaled_points1 = coords1*scale_percent1
 
-
+    '''
     # Load and display the image
     plt.imshow(img1_resize_ori, cmap="Blues")
 
@@ -855,6 +855,7 @@ def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_
     plt.scatter(scaled_points1[:, 0], scaled_points1[:, 1], 
                 color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
     plt.show()
+    '''
 
 
     # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
@@ -867,33 +868,38 @@ def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_
     scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points1])
     scaled_pointsTR = np.array([list(outTx_Rigid.TransformPoint(point)) for point in scaled_pointsTR_tmp])
 
-
+    '''
     # Load and display the image
     plt.imshow(img2_resize, cmap="Reds")
     # Plot points with increased size (adjust "s" for desired size)
     plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
                 color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
     plt.show()
+    '''
 
     # Shift coords back if cropping has been done on the second image
     scaled_pointsTR = shift_back_coordinates(scaled_pointsTR, crop_coords2)
 
+    '''
     # Load and display the image
     plt.imshow(img2_resize_ori, cmap="Reds")
     # Plot points with increased size (adjust "s" for desired size)
     plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
                 color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
     plt.show()
+    '''
 
     # Transform back coordinates regarding the induced rotation that as been done
     scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
 
+    '''
     # Load and display the image
     plt.imshow(img2_resize_ori, cmap="Reds")
     # Plot points with increased size (adjust "s" for desired size)
     plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
                 color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
     plt.show()
+    '''
 
     
     # Scale back to the full size image

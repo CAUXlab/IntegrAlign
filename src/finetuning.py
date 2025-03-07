@@ -381,8 +381,16 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     print(f"Loading .qptiff images...")
     panels = name_alignment.split('_')
     img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_high_res_imgs(scan_path1, scan_path2, id, panels)
-    scale_percent1_napari = img1_resize.shape[0] / img1_data.shape[1]
-    scale_percent2_napari = img2_resize.shape[0] / img2_data.shape[1]
+    scale_percent1 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[0]}"]
+    scale_percent2 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[1]}"]
+    operation1 = metadata_images[name_alignment][f'turn_img_{panels_alignment[0]}']
+    operation2 = metadata_images[name_alignment][f'turn_img_{panels_alignment[1]}']
+    crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
+    crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[1]}']
+    image_shape1 = metadata_images[name_alignment][f'image_shape_{panels_alignment[0]}']
+    image_shape2 = metadata_images[name_alignment][f'image_shape_{panels_alignment[1]}']
+    scale_percent1_napari = image_shape1[0] / img1_data.shape[1]
+    scale_percent2_napari = image_shape2[0] / img2_data.shape[1]
     print(f"Mirrored cursor visualization for alignment {name_alignment}")
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
     outTx_Bspline = outTx_Bspline_alignment[panels_alignment[0]]
@@ -392,14 +400,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     if outTx_Rigid is None or outTx_Bspline is None:
         raise ValueError(f"Missing data for key: {panels_alignment[0]}")
 
-    scale_percent1 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[0]}"]
-    scale_percent2 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[1]}"]
-    operation1 = metadata_images[name_alignment][f'turn_img_{panels_alignment[0]}']
-    operation2 = metadata_images[name_alignment][f'turn_img_{panels_alignment[1]}']
-    crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
-    crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[1]}']
-    image_shape1 = metadata_images[name_alignment][f'image_shape_{panels_alignment[0]}']
-    image_shape2 = metadata_images[name_alignment][f'image_shape_{panels_alignment[1]}']
+
 
     
     ## Image low resolution but fast
@@ -465,11 +466,16 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             scaled_points1 = tuple(value * scale_percent1_napari for value in points1_sitk)
             # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
             scaled_points1 = rotate_tuple_coordinates(scaled_points1, operation1, image_shape1)
+            # Shift coords if cropping has been done on the first image
+            scaled_points1 = shift_tuple_coordinates(scaled_points1, crop_coords1)
             
             # Translate the cursor position to the corresponding point in img2_data
             scaled_pointsTR_tmp = outTx_Bspline.TransformPoint(scaled_points1)
             scaled_pointsTR = outTx_Rigid.TransformPoint(scaled_pointsTR_tmp)
 
+
+            # Shift coords back if cropping has been done on the second image
+            scaled_pointsTR = shift_back_tuple_coordinates(scaled_pointsTR, crop_coords2)
             # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
             scaled_pointsTR = rotate_tuple_coordinates(scaled_pointsTR, operation2, image_shape2)
             # Transform back to the coordinate system of the full image (the one used for visualization)
@@ -713,6 +719,23 @@ def merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, 
 
     return mask
 
+def shift_tuple_coordinates(coords, crop_coords):
+    """Applies the shift induced by cropping to coordinates as is done to the image."""
+    x, y = coords
+    shift_x, shift_y = crop_coords  
+    shifted_coords = (x - shift_x, y - shift_y)  # Return a tuple instead of an array
+
+    return shifted_coords
+
+def shift_back_tuple_coordinates(coords, crop_coords):
+    """Applies the INVERSE of the shift induced by cropping to coordinates to get back to the original image."""
+    x, y = coords
+    shift_x, shift_y = crop_coords  
+    shifted_coords = (x + shift_x, y + shift_y)  # Return a tuple instead of an array
+
+    return shifted_coords
+
+
 def rotate_tuple_coordinates(coords, operation, image_shape):
     """Applies the same transformation to coordinates as is done to the image."""
     height, width = image_shape[:2]
@@ -729,6 +752,28 @@ def rotate_tuple_coordinates(coords, operation, image_shape):
     elif operation == 1:
         # Rotate clockwise by 90 degrees: (x, y) -> (y, -x)
         new_coords = (y, height - x)
+    else:
+        # No operation, return coordinates as is
+        new_coords = coords
+    
+    return new_coords
+
+def rotate_back_tuple_coordinates(coords, operation, image_shape):
+    """Applies the same transformation to coordinates as is done to the image."""
+    height, width = image_shape[:2]
+    
+    # Unpack the coordinates from the tuple
+    x, y = coords
+    
+    if operation == 3:
+        # Rotate clockwise by 90 degrees: (x, y) -> (y, -x)
+        new_coords = (y, height - x)
+    elif operation == 2:
+        # Flip left-right and up-down: (x, y) -> (-x, -y)
+        new_coords = (width - x, height - y)
+    elif operation == 1:
+        # Rotate counterclockwise by 90 degrees: (x, y) -> (-y, x)
+        new_coords = (width - y, x)
     else:
         # No operation, return coordinates as is
         new_coords = coords
