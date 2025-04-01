@@ -14,17 +14,18 @@ from openpyxl.formatting.rule import FormulaRule
 from collections import Counter
 
 from src.utils.cropping import ImageCropperApp
+from src.utils.manual_alignment import ImageManualAlignmentApp
 import tkinter as tk
 import matplotlib.pyplot as plt
 import os
-from src.alignment import get_annotations, rotate_coordinates
+from src.alignment import get_annotations
 from shapely.geometry import Polygon
 import copy
 
 
-def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
+def save_downscaled_images(params_file_path, excluded_ids):
     ## Get the parameters for alignment
-    scans_paths, annotations_paths, common_ids, panels_all, output_path, turn_img_id_dict = get_parameters(params_file_path, rotation_params, excluded_ids)
+    scans_paths, annotations_paths, common_ids, panels_all, output_path = get_parameters(params_file_path, excluded_ids)
     ## Get the name of the panels for each alignment (with reference panel at the end)
     data_dict = {}
     panel_alignment_dict = panels_name_alignment(panels_all, scans_paths)
@@ -40,7 +41,7 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
             # Load imgs downscaled and metadata
             (tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, 
             tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, 
-            img1, img2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori) = load_downscaled_imgs(scans_path1, scans_path2, id, panels, turn_img_id_dict)
+            img1, img2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori) = load_downscaled_imgs(scans_path1, scans_path2, id, panels)
 
 
             annotations_resized = []
@@ -56,12 +57,11 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
                 ## Get the annotations
                 artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
                 analysis_area_gdf_poly = analysis_area_alignment[panel]
-                operation = turn_img_id_dict[f'{id}_{panel}']
                 if index == 0:
-                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, operation, image_shape = img1_resize.shape, img_resize = img1_resize)
+                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, image_shape = img1_resize.shape, img_resize = img1_resize)
                     annotations_resized.append(analysis_area_polygons)
                 else:
-                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent2, operation, image_shape = img2_resize.shape, img_resize = img2_resize)
+                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent2, image_shape = img2_resize.shape, img_resize = img2_resize)
                     annotations_resized.append(analysis_area_polygons)
                 
 
@@ -89,6 +89,38 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
             else:
                 crop_coords1 = (0, 0)
                 crop_coords2 = (0, 0)
+
+            root = tk.Tk()
+            app = ImageManualAlignmentApp(root, img1_resize, img2_resize)
+            root.mainloop()
+            
+            if hasattr(app, 'manually_aligned_image1'):
+                img1_resize = copy.deepcopy(app.manually_aligned_image1)
+                # Convert to sitk image format
+                img1 = sitk.GetImageFromArray(img1_resize)
+                img1 = sitk.Cast(img1, sitk.sitkFloat32)
+                # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
+                manual_alignment_rotation = app.angle
+                manual_alignment_displacement = (app.trans_x, app.trans_y)
+            else:
+                manual_alignment_rotation = 0
+                manual_alignment_displacement = (0, 0)
+
+
+            '''
+            # Plotting the blue image with alpha blending and then overlaying the red image
+            plt.figure(figsize=(10, 5))
+            # Plot the first image (blue) with alpha blending
+            plt.imshow(img1_resize, cmap='Blues', alpha=0.6)  # Adjust alpha for blending
+            # Plot the second image (red) on top of the blue image
+            plt.imshow(img2_resize, cmap='Reds', alpha=0.4)  # Red image on top with a different alpha for blending
+            plt.title('Overlay of Blue and Red Images')
+            plt.axis('off')
+
+            plt.tight_layout()
+            plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image.png', bbox_inches='tight')  # Save as PNG with tight bounding box
+            '''
+
 
             
             '''
@@ -122,13 +154,15 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
                 "img2_resize": img2_resize,
                 "crop_coords1": crop_coords1,
                 "crop_coords2": crop_coords2,
+                "manual_alignment_displacement": manual_alignment_displacement,
+                "manual_alignment_rotation": manual_alignment_rotation,
                 "img1_resize_ori": img1_resize_ori,
                 "img2_resize_ori": img2_resize_ori,
                 "img1_shape_ori": img1_resize_ori.shape,
                 "img2_shape_ori": img2_resize_ori.shape,
             }
     # Add params
-    data_dict["params"] = {"common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path, "turn_img_id_dict" : turn_img_id_dict}
+    data_dict["params"] = {"common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path}
     # Save the dictionary to a file
     with open(output_path + "downscaled_images.pkl", "wb") as file:
         pickle.dump(data_dict, file)
@@ -220,7 +254,7 @@ def save_downscaled_images(params_file_path, excluded_ids, rotation_params):
 
 
         
-def get_parameters(params_file_path, rotation_params, excluded_ids):
+def get_parameters(params_file_path, excluded_ids):
     ''' Get the parameters define in the visualization step. '''
     # Load parameters
     with open(params_file_path, "r") as infile:
@@ -233,16 +267,8 @@ def get_parameters(params_file_path, rotation_params, excluded_ids):
 
     ## Exclude specific ids
     common_ids = [id for id in common_ids if id not in excluded_ids]
-
-    ## Define which image should be turn 90 degrees clock wise (1), 180 degrees (2) or 90 degrees counter clock wise (3)
-    turn_img_id_dict = {f"{id_}_{panel}": 0 for panel in panels for id_ in common_ids}
-    for rota in rotation_params:
-        # Split the string to get the key and value
-        key, value = rota.rsplit('_', 1)
-        # Assign the new value to correponding key
-        turn_img_id_dict[key] = int(value)  # Convert string to integer
     
-    return scans_paths, annotations_paths, common_ids, panels, output_path, turn_img_id_dict
+    return scans_paths, annotations_paths, common_ids, panels, output_path
 
 def panels_name_alignment(panels, folder_paths):
     ''' Get the name of the panels and corresponding folder for each alignment. '''
@@ -258,7 +284,7 @@ def panels_name_alignment(panels, folder_paths):
     
     return panel_alignment_dict
 
-def load_downscaled_imgs(folder_path1, folder_path2, id, panels, turn_img_id_dict):
+def load_downscaled_imgs(folder_path1, folder_path2, id, panels):
     # Define path of the qptiff
     path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
     path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
@@ -317,10 +343,6 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, panels, turn_img_id_dic
     img1_resize_ori = copy.deepcopy(img1_8bit)
     img2_resize_ori = copy.deepcopy(img2_8bit)
 
-    # Rotate or not the first image
-    img1_8bit = transform_image(img1_8bit, turn_img_id_dict[id + "_" + panels[0]])
-    img2_8bit = transform_image(img2_8bit, turn_img_id_dict[id + "_" + panels[1]])
-
 
     # Convert to sitk image format
     img1 = sitk.GetImageFromArray(img1_8bit)
@@ -372,23 +394,6 @@ def get_data_alignment(path_qptiff):
     scale_percent = img_resize.shape[0] / tif_tags['ImageLength']
     
     return tif_tags, channel_list, channel_name_dictionary, index_DAPI, nb_channels, img_resize, scale_percent
-
-    
-
-def transform_image(img, operation):
-    """Applies the transformation to the image based on the operation code."""
-    if operation == 1:
-        # Rotate counterclockwise by 90 degrees (equiv. to clockwise -90 degrees)
-        return np.rot90(img, -1)
-    elif operation == 2:
-        # Flip left-right and then up-down
-        return np.fliplr(np.flipud(img))
-    elif operation == 3:
-        # Rotate clockwise by 90 degrees
-        return np.rot90(img)
-    else:
-        # No operation or undefined operation, return image as is
-        return img
     
 
 def getLabels(tif_tags):
@@ -420,7 +425,7 @@ def getLabels(tif_tags):
 
 
 
-def get_polygon(gdf, scale_percent, operation, image_shape, img_resize = None, c = "R"):
+def get_polygon(gdf, scale_percent, image_shape, img_resize = None, c = "R"):
     annotation = []
     for geometry in gdf.geometry:
         if geometry.geom_type == 'Polygon':
@@ -437,8 +442,6 @@ def get_polygon(gdf, scale_percent, operation, image_shape, img_resize = None, c
     polygons = []
     for array in annotation:
         scaled_points = array*scale_percent
-        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-        scaled_points = rotate_coordinates(scaled_points, operation, image_shape)
         # Convert array to list of tuples
         points = [(x, y) for x, y in scaled_points]
         

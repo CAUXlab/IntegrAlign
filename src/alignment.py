@@ -31,7 +31,6 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
     panels_all = downscaled_images["params"].get("panels")
     # print(panels_all)
     output_path = downscaled_images["params"].get("output_path")
-    turn_img_id_dict = downscaled_images["params"].get("turn_img_id_dict")
 
     ## Remove "params" from downscaled_images
     downscaled_images = remove_params(downscaled_images)
@@ -44,8 +43,15 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
     
     ## Get reference panel
     reference_panel = panels_all[1]
-
+    breaking_id = True
     for id, downscaled_images_id in downscaled_images.items():
+        '''
+        print(id)
+        if id == "11005":
+            breaking_id = False
+        if breaking_id:
+            continue
+        '''
         print("---------------")
         print(f'Patient: {id}')
         metadata_images = {}
@@ -63,7 +69,7 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
             print("Loading downscaled images...")
             panels_alignment = name_alignment.split("_")
             metadata_images, img1, img2, img1_resize, img2_resize = extract_downscaled_images(downscaled_images_id_name_alignment, panels_alignment, 
-                                                                                              name_alignment, turn_img_id_dict, metadata_images, id)
+                                                                                              name_alignment, metadata_images, id)
             ## Alignment
             print(f"Alignment {name_alignment}...")
             spline_order = 3
@@ -133,7 +139,7 @@ def remove_params(d):
         return [remove_params(item) for item in d]
     return d
 
-def extract_downscaled_images(downscaled_images_id_name_alignment, panels, name_alignment, turn_img_id_dict, metadata_images, id):
+def extract_downscaled_images(downscaled_images_id_name_alignment, panels, name_alignment, metadata_images, id):
     ## Load images
     img1 = downscaled_images_id_name_alignment.get("img1")
     img2 = downscaled_images_id_name_alignment.get("img2")
@@ -146,16 +152,17 @@ def extract_downscaled_images(downscaled_images_id_name_alignment, panels, name_
         f"channel_list_{panel1}": downscaled_images_id_name_alignment.get("channel_list1"),
         f"channel_name_dictionary_{panel1}": downscaled_images_id_name_alignment.get("channel_name_dictionary1"),
         f"scale_percent_{panel1}": downscaled_images_id_name_alignment.get("scale_percent1"),
-        f"turn_img_{panel1}": turn_img_id_dict[id + "_" + panel1],
         f"crop_coords_{panel1}": downscaled_images_id_name_alignment.get("crop_coords1"),
         f"img_resize_ori_{panel1}": downscaled_images_id_name_alignment.get("img1_resize_ori"),
         f"image_shape_{panel1}": downscaled_images_id_name_alignment.get("img1_shape_ori"),
+        f"manual_alignment_displacement": downscaled_images_id_name_alignment.get("manual_alignment_displacement"),
+        f"manual_alignment_rotation": downscaled_images_id_name_alignment.get("manual_alignment_rotation"),
+        f"image_shape_manual_alignment": img1_resize.shape,
 
         f"tif_tags_{panel2}": downscaled_images_id_name_alignment.get("tif_tags2"),
         f"channel_list_{panel2}": downscaled_images_id_name_alignment.get("channel_list2"),
         f"channel_name_dictionary_{panel2}": downscaled_images_id_name_alignment.get("channel_name_dictionary2"),
         f"scale_percent_{panel2}": downscaled_images_id_name_alignment.get("scale_percent2"),
-        f"turn_img_{panel2}": turn_img_id_dict[id + "_" + panel2],
         f"crop_coords_{panel2}": downscaled_images_id_name_alignment.get("crop_coords2"),
         f"img_resize_ori_{panel2}": downscaled_images_id_name_alignment.get("img2_resize_ori"),
         f"image_shape_{panel2}": downscaled_images_id_name_alignment.get("img2_shape_ori"),
@@ -582,17 +589,18 @@ def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_imag
     scale_percent2 = metadata_images[name_alignment][f'scale_percent_{panels[1]}']
     image_shape1 = metadata_images[name_alignment][f'image_shape_{panels[0]}']
     image_shape2 = metadata_images[name_alignment][f'image_shape_{panels[1]}']
-    operation1 = metadata_images[name_alignment][f'turn_img_{panels[0]}']
-    operation2 = metadata_images[name_alignment][f'turn_img_{panels[1]}']
     crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels[0]}']
     crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels[1]}']
+    manual_alignment_displacement = metadata_images[name_alignment]['manual_alignment_displacement']
+    manual_alignment_rotation = metadata_images[name_alignment]['manual_alignment_rotation']
+    image_shape_manual_alignment = metadata_images[name_alignment]['image_shape_manual_alignment']
     img1_resize_ori = metadata_images[name_alignment][f'img_resize_ori_{panels[0]}']
     img2_resize_ori = metadata_images[name_alignment][f'img_resize_ori_{panels[1]}']
     coords1 = cell_coordinates[f'{panels[0]}_panel_DAPI']
     coords2 = cell_coordinates[f'{panels[1]}_panel_DAPI']
     label1 = f'DAPI from panel {panels[0]}'
     label2 = f'DAPI {panels[1]}'
-    plot_correlation, correlations = correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori)
+    plot_correlation, correlations = correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori)
 
 
     best_ms = max(correlations, key=correlations.get)
@@ -780,7 +788,7 @@ def grid_deform_detJacobian(simg2, transformDomainMeshSize, spline_order, outTx_
     return axs
 
 
-def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
+def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, scale_percent2, coords1, coords2, label1, label2, pixel_size_raster_fullres, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
     correlations = {}
     num_images = len(outTx_Bspline_dict)
     num_cols = num_images
@@ -794,7 +802,7 @@ def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, 
     for ax, (ms, outTx_Bspline) in zip(axes, outTx_Bspline_dict.items()):
         # print(ms)
 
-        coords1_tr = transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori)
+        coords1_tr = transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori)
     
         # Créer les rasters avec une taille fixe
         min_x = min(np.min(coords1_tr[:, 0]), np.min(coords2[:, 0])) - 1000
@@ -844,7 +852,7 @@ def correlation_rasters_report(outTx_Bspline_dict, outTx_Rigid, scale_percent1, 
 
     return plot_correlation, correlations
     
-def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
+def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori):
     scaled_points1 = coords1*scale_percent1
 
     '''
@@ -857,16 +865,26 @@ def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_
     plt.show()
     '''
 
-
-    # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-    scaled_points1 = rotate_coordinates(scaled_points1, operation1, image_shape1)
     # Shift coords if cropping has been done on the first image
     scaled_points1 = shift_coordinates(scaled_points1, crop_coords1)
+    # Shift and rotate coords based on pre-alignment
+    scaled_points1 = rotate_coordinates_angle(scaled_points1, -manual_alignment_rotation, image_shape_manual_alignment)
+    scaled_points1 = shift_coordinates(scaled_points1, tuple(np.negative(manual_alignment_displacement)))
+
+    '''
+    # Load and display the image
+    plt.imshow(img1_resize, cmap="Blues")
+    # Plot points with increased size (adjust "s" for desired size)
+    plt.scatter(scaled_points1[:, 0], scaled_points1[:, 1], 
+                color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
+    plt.show()
+    '''
 
     
     # Transform scaled points 1 in the coordinate system of slide 2
     scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points1])
     scaled_pointsTR = np.array([list(outTx_Rigid.TransformPoint(point)) for point in scaled_pointsTR_tmp])
+
 
     '''
     # Load and display the image
@@ -888,19 +906,6 @@ def transform_coords(coords1, outTx_Bspline, outTx_Rigid, scale_percent1, scale_
                 color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
     plt.show()
     '''
-
-    # Transform back coordinates regarding the induced rotation that as been done
-    scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
-
-    '''
-    # Load and display the image
-    plt.imshow(img2_resize_ori, cmap="Reds")
-    # Plot points with increased size (adjust "s" for desired size)
-    plt.scatter(scaled_pointsTR[:, 0], scaled_pointsTR[:, 1], 
-                color='blue', marker='o', s=0.001, label="Scaled Points")  # Increased size
-    plt.show()
-    '''
-
     
     # Scale back to the full size image
     coords1_tr = scaled_pointsTR/scale_percent2
@@ -923,6 +928,49 @@ def shift_back_coordinates(coords, crop_coords):
 
     return shifted_coords
 
+def rotate_coordinates_angle(coordinates, angle, img_shape):
+    """
+    Rotate coordinates to match the image rotation with reshape=False
+    """
+    # Convert angle to radians
+    theta = np.radians(angle)
+    
+    # Rotation matrix for 2D points
+    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)],
+                                [np.sin(theta), np.cos(theta)]])
+    
+    # Calculate the center of the image
+    center_x, center_y = img_shape[1] / 2, img_shape[0] / 2
+    
+    # Translate coordinates to the image center
+    coords_centered = coordinates - np.array([center_x, center_y])
+    
+    # Apply the rotation matrix to the centered coordinates
+    rotated_coords_centered = np.dot(coords_centered, rotation_matrix.T)
+    
+    # Translate the coordinates back by adding the center back
+    rotated_coords = rotated_coords_centered + np.array([center_x, center_y])
+    
+    return rotated_coords
+
+def shift_and_rotate_coordinates(coords, crop_coords, angle):
+    """Applies the shift induced by cropping and rotates coordinates around the origin."""
+    shift_x, shift_y = crop_coords  
+    shifted_coords = np.array([[point[0] - shift_x, point[1] - shift_y] for point in coords])
+    
+    # Convert angle to radians
+    theta = np.radians(angle)
+    cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+    
+    # Rotation matrix
+    rotation_matrix = np.array([[cos_theta, -sin_theta], [sin_theta, cos_theta]])
+    
+    # Apply rotation
+    rotated_coords = np.dot(shifted_coords, rotation_matrix.T)
+    
+    return rotated_coords
+
+
 # Create a raster from a set of points
 def create_raster_from_points(points, pixel_size, min_x, max_x, min_y, max_y):
     width = int(np.ceil((max_x - min_x) / pixel_size))
@@ -940,43 +988,7 @@ def create_raster_from_points(points, pixel_size, min_x, max_x, min_y, max_y):
     
     return raster_array
 
-def rotate_coordinates(coords, operation, image_shape):
-    """Applies the same transformation to coordinates as is done to the image."""
-    height, width = image_shape[:2]
-    
-    if operation == 3:
-        # Rotate counterclockwise by 90 degrees: (x, y) -> (-y, x)
-        new_coords = np.column_stack((width - coords[:, 1], coords[:, 0]))
-    elif operation == 2:
-        # Flip left-right and up-down: (x, y) -> (-x, -y)
-        new_coords = np.column_stack((width - coords[:, 0], height - coords[:, 1]))
-    elif operation == 1:
-        # Rotate clockwise by 90 degrees: (x, y) -> (y, -x)
-        new_coords = np.column_stack((coords[:, 1], height - coords[:, 0]))
-    else:
-        # No operation, return coordinates as is
-        new_coords = coords
-    
-    return new_coords
 
-def rotate_back_coordinates(coords, operation, image_shape):
-    """Applies the INVERSE transformation to coordinates to get back to the original image."""
-    height, width = image_shape[:2]
-    
-    if operation == 3:
-        # Rotate clockwise by 90 degrees: (x, y) -> (y, -x)
-        new_coords = np.column_stack((coords[:, 1], height - coords[:, 0]))
-    elif operation == 2:
-        # Flip left-right and up-down: (x, y) -> (-x, -y)
-        new_coords = np.column_stack((width - coords[:, 0], height - coords[:, 1]))
-    elif operation == 1:
-        # Rotate counterclockwise by 90 degrees: (x, y) -> (-y, x)
-        new_coords = np.column_stack((width - coords[:, 1], coords[:, 0]))
-    else:
-        # No operation, return coordinates as is
-        new_coords = coords
-    
-    return new_coords
 
 
 
@@ -991,22 +1003,23 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
             name_alignment = next(filter(lambda name: panel in name, name_alignments))
             scale_percent1 = metadata_images[name_alignment][f'scale_percent_{panel}']
             image_shape1 = metadata_images[name_alignment][f'image_shape_{panel}']
-            operation1 = metadata_images[name_alignment][f'turn_img_{panel}']
             crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panel}']
             img_resize1 = img_resize_alignment[panel]
+            manual_alignment_displacement = metadata_images[name_alignment]['manual_alignment_displacement']
+            manual_alignment_rotation = metadata_images[name_alignment]['manual_alignment_rotation']
+            image_shape_manual_alignment = metadata_images[name_alignment]['image_shape_manual_alignment']
             ## Scale annotations to downscaled image resolution
-            artefacts_empty_array = get_gdf(artefacts_empty_gdf_poly, scale_percent1, operation1, crop_coords1, image_shape1, img_resize1, c="B")
-            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent1, operation1, crop_coords1, image_shape1, img_resize1, c="B")
+            artefacts_empty_array = get_gdf(artefacts_empty_gdf_poly, scale_percent1, crop_coords1, image_shape1, img_resize1, c="B")
+            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent1, crop_coords1, image_shape1, img_resize1, c="B")
             ## Transform scaled annotations to downscaled reference image
             scale_percent2 = metadata_images[name_alignment][f'scale_percent_{reference_panel}']
             image_shape2 = metadata_images[name_alignment][f'image_shape_{reference_panel}']
-            operation2 = metadata_images[name_alignment][f'turn_img_{reference_panel}']
             crop_coords2 = metadata_images[name_alignment][f'crop_coords_{reference_panel}']
             img_resize2 = img_resize_alignment[reference_panel]
             outTx_Rigid = outTx_Rigid_alignment[panel]
             outTx_Bspline = outTx_Bspline_alignment[panel]
-            artefacts_empty_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(artefacts_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img_resize2)
-            analysis_area_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(analysis_area_array, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img_resize2)
+            artefacts_empty_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(artefacts_empty_array, scale_percent1, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, outTx_Rigid, outTx_Bspline, img_resize2)
+            analysis_area_alignment[f'{panel}_in_{reference_panel}_panel'] = transform_annotation(analysis_area_array, scale_percent1, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, outTx_Rigid, outTx_Bspline, img_resize2)
 
 
     ## Fix invalid geometries in artefacts and empty annotations
@@ -1087,7 +1100,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
 
 
 
-def get_gdf(gdf, scale_percent, operation, crop_coords, image_shape, img_resize = None, c = "R"):
+def get_gdf(gdf, scale_percent, crop_coords, image_shape, img_resize = None, c = "R"):
     annotation = []
     for geometry in gdf.geometry:
         if geometry.geom_type == 'Polygon':
@@ -1104,8 +1117,6 @@ def get_gdf(gdf, scale_percent, operation, crop_coords, image_shape, img_resize 
     polygons = []
     for array in annotation:
         scaled_points = array*scale_percent
-        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-        scaled_points = rotate_coordinates(scaled_points, operation, image_shape)
         # Shift coords if cropping has been done on the first image
         scaled_points = shift_coordinates(scaled_points, crop_coords)
         # Convert array to list of tuples
@@ -1129,17 +1140,18 @@ def get_gdf(gdf, scale_percent, operation, crop_coords, image_shape, img_resize 
 
 
 
-def transform_annotation(annotations, scale_percent1, scale_percent2, image_shape1, image_shape2, operation1, operation2, crop_coords1, crop_coords2, outTx_Rigid, outTx_Bspline, img_resize):
+def transform_annotation(annotations, scale_percent1, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, outTx_Rigid, outTx_Bspline, img_resize):
     
     # Transform Shapes from IF2 to IF3 coordinate system
     annotation_TR= []
     for shape in annotations:
 
         scaled_points = shape*scale_percent1
-        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-        scaled_points = rotate_coordinates(scaled_points, operation1, image_shape1)
         # Shift coords if cropping has been done on the first image
         scaled_points = shift_coordinates(scaled_points, crop_coords1)
+        # Shift and rotate coords based on pre-alignment
+        scaled_points = rotate_coordinates_angle(scaled_points, -manual_alignment_rotation, image_shape_manual_alignment)
+        scaled_points = shift_coordinates(scaled_points, tuple(np.negative(manual_alignment_displacement)))
 
         
         # Transform scaled points 1 in the coordinate system of slide 2
@@ -1148,26 +1160,9 @@ def transform_annotation(annotations, scale_percent1, scale_percent2, image_shap
 
         # Shift coords back if cropping has been done on the second image
         scaled_pointsTR = shift_back_coordinates(scaled_pointsTR, crop_coords2)
-        # Transform back coordinates regarding the induced rotation that as been done
-        scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
         # Scale back to the full size image
         annotation_TR.append(scaled_pointsTR/scale_percent2)
 
-
-        '''
-        scaled_points = shape*scale_percent1
-        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-        scaled_points = rotate_coordinates(scaled_points, operation1, image_shape1)
-        
-        # Transform scaled points 1 in the coordinate system of slide 2
-        scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points])
-        scaled_pointsTR = np.array([list(outTx_Rigid.TransformPoint(point)) for point in scaled_pointsTR_tmp])
-
-        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-        scaled_pointsTR = rotate_coordinates(scaled_pointsTR, operation2, image_shape2)
-        # Scale back to the full size image
-        annotation_TR.append(scaled_pointsTR/scale_percent2)
-        '''
     
 
     '''
@@ -1175,8 +1170,6 @@ def transform_annotation(annotations, scale_percent1, scale_percent2, image_shap
     polygonsTR = []
     for array in annotation_TR:
         scaled_points = array*scale_percent2
-        # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-        scaled_points = rotate_coordinates(scaled_points, operation2, image_shape2)
         # Shift coords if cropping has been done on the first image
         scaled_points = shift_coordinates(scaled_points, crop_coords2)
         # Convert array to list of tuples
@@ -1270,12 +1263,14 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     print(panels_alignment[0])
     scale_percent1 = metadata_images[name_alignment][f'scale_percent_{panels_alignment[0]}']
     image_shape1 = metadata_images[name_alignment][f'image_shape_{panels_alignment[0]}']
-    operation1 = metadata_images[name_alignment][f'turn_img_{panels_alignment[0]}']
     crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
+    manual_alignment_displacement = metadata_images[name_alignment]['manual_alignment_displacement']
+    manual_alignment_rotation = metadata_images[name_alignment]['manual_alignment_rotation']
+    image_shape_manual_alignment = metadata_images[name_alignment]['image_shape_manual_alignment']
+    
 
     scale_percent2 = metadata_images[name_alignment][f'scale_percent_{panels_alignment[1]}']
     image_shape2 = metadata_images[name_alignment][f'image_shape_{panels_alignment[1]}']
-    operation2 = metadata_images[name_alignment][f'turn_img_{panels_alignment[1]}']
     crop_coords2 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[1]}']
 
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
@@ -1286,10 +1281,11 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
 
 
     scaled_points = coords*scale_percent1
-    # Transform scaled coordinates regarding the induced rotation that as been done to the corresponding image to facilitate the alignment
-    scaled_points = rotate_coordinates(scaled_points, operation1, image_shape1)
     # Shift coords if cropping has been done on the first image
     scaled_points = shift_coordinates(scaled_points, crop_coords1)
+    # Shift and rotate coords based on pre-alignment
+    scaled_points = rotate_coordinates_angle(scaled_points, -manual_alignment_rotation, image_shape_manual_alignment)
+    scaled_points = shift_coordinates(scaled_points, tuple(np.negative(manual_alignment_displacement)))
 
     # Transform scaled points 1 in the coordinate system of slide 2
     scaled_pointsTR_tmp = np.array([list(outTx_Bspline.TransformPoint(point)) for point in scaled_points])
@@ -1297,8 +1293,6 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     
     # Shift coords back if cropping has been done on the second image
     scaled_pointsTR = shift_back_coordinates(scaled_pointsTR, crop_coords2)
-    # Transform back coordinates regarding the induced rotation that as been done
-    scaled_pointsTR = rotate_back_coordinates(scaled_pointsTR, operation2, image_shape2)
     # Scale back to the full size image
     coords_tr = scaled_pointsTR/scale_percent2
     cell_coordinates[f'{panels_alignment[0]}_panel_DAPI_transformed'] = coords_tr

@@ -39,7 +39,7 @@ if __name__ == "__main__":
         visualization(args.scans, args.annotations, args.panels, args.output)
 
     elif args.task == "saveimgs":
-        save_downscaled_images(args.params, args.exclude, args.rotate)
+        save_downscaled_images(args.params, args.exclude)
 
     elif args.task == "align":
         alignment(args.dwnscimg, args.tables, args.annotations, args.resolution, args.maxMS, args.metric, args.raster, args.alpha)

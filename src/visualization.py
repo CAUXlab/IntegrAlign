@@ -86,7 +86,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
             artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
 
             analysis_area_gdf_poly = analysis_area_alignment[panel]
-            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, operation = 0, crop_coords = (0, 0), image_shape = img_resized.shape, img_resize = img_resized)
+            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, crop_coords = (0, 0), image_shape = img_resized.shape, img_resize = img_resized)
             annotations_resized.append([area * scale_percent for area in analysis_area_array])
         ## Plot the compressed images
         fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))

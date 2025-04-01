@@ -22,9 +22,7 @@ def parse_arguments():
                                    help="Paths to the params file")
     saveimgs_parser.add_argument('--exclude', type=str, nargs='+', default=[],
                                    help="List of patient IDs to exclude from alignment")
-    saveimgs_parser.add_argument('--rotate', type=str, nargs='+', default=[],
-                                   help="String of the image to rotate with the rotation parameter. \nExemple : \"01008_DC_2\" will turn 180 degrees the scan of the panel DC for the patient with id 01008. \nRotation parameters: turn 90 degrees clock wise (1), 180 degrees (2) or 90 degrees counter clock wise (3)")
-    
+                                   
     # Alignment Task
     alignment_parser = subparsers.add_parser("align", help="Align panels, generate QC report and a table with combined cell types")
     alignment_parser.add_argument('--dwnscimg', required=True,
