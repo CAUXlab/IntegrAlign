@@ -1,7 +1,7 @@
 import numpy as np
 import tkinter as tk
 from tkinter import Button
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageEnhance
 from scipy.ndimage import rotate, shift
 import gc
 
@@ -13,6 +13,12 @@ class ImageManualAlignmentApp:
         # Store original images as grayscale
         self.img1_original = Image.fromarray(img1_8bit).convert("L")  # Keep as grayscale
         self.img2_original = Image.fromarray(img2_8bit).convert("L")  # Keep as grayscale
+
+        ## Increase brightness manually before displaying 
+        # To compensate the grayscale to RGB conversion for tkinter
+        brightness_factor = 5
+        self.img1_original = self.adjust_brightness(self.img1_original, brightness_factor)
+        self.img2_original = self.adjust_brightness(self.img2_original, brightness_factor)
 
         self.img1_8bit = img1_8bit
         self.img2_8bit = img2_8bit
@@ -85,6 +91,11 @@ class ImageManualAlignmentApp:
 
         self.close_button = Button(master, text="Next", command=self.close_window)
         self.close_button.pack(fill=tk.X, padx=10, pady=5)
+
+    def adjust_brightness(self, pil_image, factor):
+        """Increase brightness of grayscale image while preserving mode."""
+        enhancer = ImageEnhance.Brightness(pil_image)
+        return enhancer.enhance(factor)  # Factor > 1 brightens, < 1 darkens
 
     def get_scale_factor(self, img1, img2):
         """Compute a single scale factor for both images to fit inside the canvas."""

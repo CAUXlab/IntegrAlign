@@ -1,9 +1,12 @@
 import json
+import xml.etree.ElementTree as ET
 import numpy as np
 from tqdm import tqdm # type: ignore
 import pickle
 
 from tifffile import TiffFile # type: ignore
+from tifffile.tiffcomment import tiffcomment
+from xml.etree import ElementTree
 import cv2 # type: ignore
 import SimpleITK as sitk # type: ignore
 
@@ -22,6 +25,9 @@ from src.alignment import get_annotations
 from shapely.geometry import Polygon
 import copy
 
+import os
+import fnmatch
+
 
 def save_downscaled_images(params_file_path, excluded_ids):
     ## Get the parameters for alignment
@@ -39,10 +45,8 @@ def save_downscaled_images(params_file_path, excluded_ids):
             unique_name_alignments.add(name_alignment)
             scans_path1, scans_path2 = [path for path in scans_alignment_paths]
             # Load imgs downscaled and metadata
-            (tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, 
-            tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, 
-            img1, img2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori) = load_downscaled_imgs(scans_path1, scans_path2, id, panels)
-
+            (channels1, scale_percent1, channels2, scale_percent2,  
+            img1, img2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori) = load_downscaled_imgs(scans_path1, scans_path2, id)
 
             annotations_resized = []
             for panel in panels:
@@ -53,9 +57,14 @@ def save_downscaled_images(params_file_path, excluded_ids):
                 # Get annotations
                 artefacts_empty_alignment = {}
                 analysis_area_alignment = {}
-                geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                annotation_file_path = next(
+                    (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                    if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                    None
+                )
                 ## Get the annotations
-                artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
                 analysis_area_gdf_poly = analysis_area_alignment[panel]
                 if index == 0:
                     analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, image_shape = img1_resize.shape, img_resize = img1_resize)
@@ -140,13 +149,9 @@ def save_downscaled_images(params_file_path, excluded_ids):
             '''
 
             data_dict[id][name_alignment] = {
-                "tif_tags1": tif_tags1,
-                "channel_list1": channel_list1,
-                "channel_name_dictionary1": channel_name_dictionary1,
+                "channels1": channels1,
                 "scale_percent1": scale_percent1,
-                "tif_tags2": tif_tags2,
-                "channel_list2": channel_list2,
-                "channel_name_dictionary2": channel_name_dictionary2,
+                "channels2": channels2,
                 "scale_percent2": scale_percent2,
                 "img1": img1,
                 "img2": img2,
@@ -284,57 +289,30 @@ def panels_name_alignment(panels, folder_paths):
     
     return panel_alignment_dict
 
-def load_downscaled_imgs(folder_path1, folder_path2, id, panels):
-    # Define path of the qptiff
-    path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
-    path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
+def load_downscaled_imgs(folder_path1, folder_path2, id):
+    # Define path of the qptiff or tiff
+    path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
+    path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
+
+    #path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
+    #path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
     # print("path1:", path1)
     # print("path2:", path2)
-    
-    ## Load images
-    tif_tags1, channel_list1, channel_name_dictionary1, index_DAPI1, nb_channels1, img1_resize, scale_percent1 = get_data_alignment(path1)
-    tif_tags2, channel_list2, channel_name_dictionary2, index_DAPI2, nb_channels2, img2_resize, scale_percent2 = get_data_alignment(path2)
-    # print("Compression")
-    comp_lvl1 = int((1/scale_percent1))
-    comp_lvl2 = int((1/scale_percent2))
-    # print(f"img1: 1/{comp_lvl1}ème")
-    # print(f"img2: 1/{comp_lvl2}ème")
 
-    # Check if both images are the same size
-    if comp_lvl2 < comp_lvl1:
-        print(f"Patient {id}: Not same compression level")
-        tif = TiffFile(path1)
-        while comp_lvl2 < comp_lvl1:
-            index_DAPI1_last = index_DAPI1
-            index_DAPI1 -= nb_channels1
-            shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI1:index_DAPI1_last]])
-            while len(shape_channels) > 1:
-                index_DAPI1_last+=1
-                index_DAPI1+=1
-                shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI1:index_DAPI1_last]])
-            img1_resize = tif.pages[index_DAPI1].asarray()
-            scale_percent1 = img1_resize.shape[0] / tif_tags1['ImageLength']
-            comp_lvl1 = int((1/scale_percent1))
-            print("Finding the correct compression")
-            print(f"img1: 1/{comp_lvl1}ème")
-            print(f"img2: 1/{comp_lvl2}ème")
-    if comp_lvl1 < comp_lvl2:
-        print(f"Patient {id}: Not same compression level")
-        tif = TiffFile(path2)
-        while comp_lvl1 < comp_lvl2:
-            index_DAPI2_last = index_DAPI2
-            index_DAPI2 -= nb_channels2
-            shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI2:index_DAPI2_last]])
-            while len(shape_channels) > 1:
-                index_DAPI2_last+=1
-                index_DAPI2+=1
-                shape_channels = np.unique([len(im.asarray()) for im in tif.pages[index_DAPI2:index_DAPI2_last]])
-            img2_resize = tif.pages[index_DAPI2].asarray()
-            scale_percent2 = img2_resize.shape[0] / tif_tags2['ImageLength']
-            comp_lvl2 = int((1/scale_percent2))
-            print("Finding the correct compression")
-            print(f"img1: 1/{comp_lvl1}ème")
-            print(f"img2: 1/{comp_lvl2}ème")
+    if path1.endswith('.qptiff') and path2.endswith('.qptiff'):
+        ## Load images
+        channels1, img1_resize, sizeX_compressed1, sizeX_fullres1 = get_data_alignment_qptiff(path1)
+        channels2, img2_resize, sizeX_compressed2, sizeX_fullres2 = get_data_alignment_qptiff(path2)
+
+    elif path1.endswith('.tif') and path2.endswith('.tif'):
+        channels1, img1_resize, sizeX_compressed1, sizeX_fullres1 = get_data_alignment_tif(path1)
+        channels2, img2_resize, sizeX_compressed2, sizeX_fullres2 = get_data_alignment_tif(path2)
+
+    scale_percent1 = sizeX_compressed1/sizeX_fullres1
+    scale_percent2 = sizeX_compressed2/sizeX_fullres2
+
+    img1_resize, scale_percent1, img2_resize, scale_percent2 = get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, path2, img2_resize, scale_percent2, sizeX_fullres2)
+
 
     # Scale images to 8bit
     img1_8bit = cv2.convertScaleAbs(img1_resize)
@@ -354,74 +332,121 @@ def load_downscaled_imgs(folder_path1, folder_path2, id, panels):
     img1_arr = sitk.GetArrayFromImage(img1)
     img2_arr = sitk.GetArrayFromImage(img2)
 
-    return tif_tags1, channel_list1, channel_name_dictionary1, scale_percent1, tif_tags2, channel_list2, channel_name_dictionary2, scale_percent2, img1, img2, img1_arr, img2_arr, img1_resize_ori, img2_resize_ori
+    return channels1, scale_percent1, channels2, scale_percent2, img1, img2, img1_arr, img2_arr, img1_resize_ori, img2_resize_ori
 
 
-def get_data_alignment(path_qptiff):
-    tif = TiffFile(path_qptiff)
-    
-    ## Get tags from DAPI channel in .pages
-    tif_tags= {}
-    for tag in tif.pages[0].tags.values():
-        name, value = tag.name, tag.value
-        tif_tags[name] = value
-    channel_list, channel_name_dictionary = getLabels(tif_tags)
-    
-    ## Load the most compressed DAPI image in .pages
-    # get nb of channels
-    '''
-    last_indexes = 10
-    im_sizes = []
-    for im in tif.pages[-last_indexes:]:  
-        im_sizes.append(len(im.asarray()))
-    count_dict = Counter(im_sizes)
-    nb_channels = max(count_dict.values())
-    most_comp_DAPI_index = len(tif.pages) - nb_channels+2
-    '''
-    last_indexes = 10
-    im_sizes = []
-    for im in tif.pages[-last_indexes:]:  
-        im_sizes.append(len(im.asarray()))
-        
-    count_dict = Counter(im_sizes)  # Count occurrences of each size
-    nb_channels = max(count_dict.values())  # Most frequent count
-    most_frequent_size = max(count_dict, key=count_dict.get)  # Get the most frequent size
-    # Find indices of channels
-    indices = [i for i, size in enumerate(im_sizes) if size == most_frequent_size]
-    indices  = [x - last_indexes for x in indices]
-    index_DAPI = min(indices)
-    img_resize = tif.pages[index_DAPI].asarray()
-    scale_percent = img_resize.shape[0] / tif_tags['ImageLength']
-    
-    return tif_tags, channel_list, channel_name_dictionary, index_DAPI, nb_channels, img_resize, scale_percent
-    
+def get_data_alignment_qptiff(path_scan):
+    tif = TiffFile(path_scan)
+    tif_tags = {tag.name: tag.value for tag in tif.pages[0].tags.values()}
+    # Parse the XML content
+    xml_content = tif_tags.get("ImageDescription", "").replace("\r\n", "").replace("\t", "")
+    channels = generate_channels_list(xml_content)
+    # Load the most compressed DAPI image in .pages
+    img_resize = tif.series[0].levels[-1].asarray()[0]
+    sizeX_fullres2 = tif_tags['ImageLength']
+    sizeX_compressed2 = img_resize.shape[0]
 
-def getLabels(tif_tags):
-    substr = "<ScanColorTable-k>"
-    start = 0
-    strings = []
-    while True:
-        start = tif_tags['ImageDescription'].find(substr, start)
-        if start == -1: # when '<ScanColorTable-k>' is not found
+    return channels, img_resize, sizeX_compressed2, sizeX_fullres2
+
+def extract_json_from_xml(xml_content):
+    """Extracts JSON content from an XML element that contains it as text."""
+    root = ET.fromstring(xml_content)
+    
+    # Find the first element containing JSON-like text
+    json_text = None
+    for elem in root.iter():
+        if elem.text and "{" in elem.text and "spectra" in elem.text:
+            json_text = elem.text.strip()
             break
-        string = tif_tags['ImageDescription'][start+18:start+26]
-        strings.append(string)
-        start += 1
-    marquages = []
-    wl = []
-    for s in strings:
-        if s.startswith('DAPI'):
-            marquages.append(s[0:4])
-            wl.append('450')
-        if s.startswith('Opal'):
-            marquages.append(s)
-            wl.append(s[5:])
-            
-    dictionary = {key: value for key, value in enumerate(wl)}
-    # change to detailled list
-    channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
 
-    return channel_list, dictionary
+    if not json_text:
+        raise ValueError("No JSON data found in XML.")
+    
+    return json.loads(json_text)
+
+def opal_to_rgb(opal_name):
+    """Converts Opal fluorophores to RGB values (approximate mappings)."""
+    opal_rgb_map = {
+    "Opal 480": '65535',      
+    "Opal 520": '65280',      
+    "Opal 570": '16776960',   
+    "Opal 620": '16744448',   
+    "Opal 690": '16711680',   
+    "Opal 780": '16777215',  
+    "Sample AF": '0',       
+    "DAPI": '255'              
+    }
+    return opal_rgb_map.get(opal_name, '0')  # Default to white
+
+def generate_channels_list(xml_content):
+    """Generates a structured list of channels with IDs and RGB values."""
+    json_data = extract_json_from_xml(xml_content)
+    spectra = json_data.get("spectra", [])
+    bands = json_data.get("bands", [])
+
+    channels = []
+    for i, spectrum in enumerate(spectra):
+        fluor = spectrum.get("fluor", "Unknown")
+        marker = spectrum.get("marker", "Unknown")
+        rgb = opal_to_rgb(fluor)
+
+        channels.append({
+            "id": i + 1,
+            "name": f"{marker} ({fluor})",
+            "rgb": rgb
+        })
+
+    return channels
+
+def get_data_alignment_tif(path_scan):
+    tif = TiffFile(path_scan, is_ome=False)
+    # Load the most compressed DAPI image in .levels
+    img_resize = tif.series[0].levels[-1].asarray()[0]
+    xml = tiffcomment(path_scan)
+    root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
+    sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
+    sizeX_fullres = int(sizeX[0])
+    sizeX_compressed = int(sizeX[-1])
+    channels = [
+        {"id": elem.get("id"), "name": elem.get("name"), "rgb": elem.get("rgb")}
+        for elem in root.iter() if elem.tag == "channel"
+    ]
+    return channels, img_resize, sizeX_compressed, sizeX_fullres
+
+def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, path2, img2_resize, scale_percent2, sizeX_fullres2):
+    # print("Compression")
+    comp_lvl1 = int((1/scale_percent1))
+    comp_lvl2 = int((1/scale_percent2))
+    # print(f"img1: 1/{comp_lvl1}ème")
+    # print(f"img2: 1/{comp_lvl2}ème")
+
+    # Check if both images are the same size
+    if comp_lvl2 < comp_lvl1:
+        index_comp = -1
+        print(f"Patient {id}: Not same compression level")
+        tif = TiffFile(path1)
+        while comp_lvl2 < comp_lvl1:
+            index_comp-=1
+            img1_resize = tif.series[0].levels[index_comp].asarray()[0]
+            scale_percent1 = img1_resize.shape[0] / sizeX_fullres1
+            comp_lvl1 = int((1/scale_percent1))
+            print("Finding the correct compression")
+            print(f"img1: 1/{comp_lvl1}ème")
+            print(f"img2: 1/{comp_lvl2}ème")
+    if comp_lvl1 < comp_lvl2:
+        index_comp = -1
+        print(f"Patient {id}: Not same compression level")
+        tif = TiffFile(path2)
+        while comp_lvl1 < comp_lvl2:
+            index_comp-=1
+            img2_resize = tif.series[0].levels[index_comp].asarray()[0]
+            scale_percent2 = img2_resize.shape[0] / sizeX_fullres2
+            comp_lvl2 = int((1/scale_percent2))
+            print("Finding the correct compression")
+            print(f"img1: 1/{comp_lvl1}ème")
+            print(f"img2: 1/{comp_lvl2}ème")
+    
+    return img1_resize, scale_percent1, img2_resize, scale_percent2
 
 
 

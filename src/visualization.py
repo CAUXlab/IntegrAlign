@@ -82,8 +82,13 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
             # Get annotations
             artefacts_empty_alignment = {}
             analysis_area_alignment = {}
-            geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
-            artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+            # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+            annotation_file_path = next(
+                (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                None
+            )
+            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
 
             analysis_area_gdf_poly = analysis_area_alignment[panel]
             analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, crop_coords = (0, 0), image_shape = img_resized.shape, img_resize = img_resized)

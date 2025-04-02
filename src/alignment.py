@@ -14,6 +14,7 @@ from scipy.stats import pearsonr
 from rasterio.transform import from_origin # type: ignore
 from pathlib import Path
 from shapely.geometry import mapping, Polygon, MultiPolygon, Point
+import xml.etree.ElementTree as ET
 import geopandas as gpd
 from shapely.ops import unary_union
 import json
@@ -85,10 +86,15 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
                 annotations = annotations_tables[index]
                 # Get the file path corresponding to id
                 csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
-                geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                annotation_file_path = next(
+                    (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                    if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                    None
+                )
                 ## Get the coordinates table and annotations
                 cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
-                artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
             ## Create the alignment report
             print("Creating the alignment report...")
             outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment = alignment_report(id, name_alignment, panels_alignment, cell_coordinates, metadata_images, output_path, 
@@ -148,9 +154,7 @@ def extract_downscaled_images(downscaled_images_id_name_alignment, panels, name_
     panel1, panel2 = panels
     ## Get metadata
     metadata_images[name_alignment] = {
-        f"tif_tags_{panel1}": downscaled_images_id_name_alignment.get("tif_tags1"),
-        f"channel_list_{panel1}": downscaled_images_id_name_alignment.get("channel_list1"),
-        f"channel_name_dictionary_{panel1}": downscaled_images_id_name_alignment.get("channel_name_dictionary1"),
+        f"channels_{panel1}": downscaled_images_id_name_alignment.get("channels1"),
         f"scale_percent_{panel1}": downscaled_images_id_name_alignment.get("scale_percent1"),
         f"crop_coords_{panel1}": downscaled_images_id_name_alignment.get("crop_coords1"),
         f"img_resize_ori_{panel1}": downscaled_images_id_name_alignment.get("img1_resize_ori"),
@@ -159,9 +163,7 @@ def extract_downscaled_images(downscaled_images_id_name_alignment, panels, name_
         f"manual_alignment_rotation": downscaled_images_id_name_alignment.get("manual_alignment_rotation"),
         f"image_shape_manual_alignment": img1_resize.shape,
 
-        f"tif_tags_{panel2}": downscaled_images_id_name_alignment.get("tif_tags2"),
-        f"channel_list_{panel2}": downscaled_images_id_name_alignment.get("channel_list2"),
-        f"channel_name_dictionary_{panel2}": downscaled_images_id_name_alignment.get("channel_name_dictionary2"),
+        f"channels_{panel2}": downscaled_images_id_name_alignment.get("channels2"),
         f"scale_percent_{panel2}": downscaled_images_id_name_alignment.get("scale_percent2"),
         f"crop_coords_{panel2}": downscaled_images_id_name_alignment.get("crop_coords2"),
         f"img_resize_ori_{panel2}": downscaled_images_id_name_alignment.get("img2_resize_ori"),
@@ -343,13 +345,50 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
     
     new_df = pd.DataFrame()
 
-    required_columns = [
+    required_columns = ['Phenotype', 'Classifier.Label', 'Object.Id', 'XMin', 'XMax', 'YMin', 'YMax', 'x', 'y']
+
+    required_columns_SPIAT = [
     'x', 'y', 'Phenotype', 'Cell_type', 'ID', 'Tissue_Category',
-    'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel'  # added required columns for the commented code
+    'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel' 
     ]
 
     # Check if it is a table from SPIAT with cell types or not
     if all(col in df.columns for col in required_columns):
+        # Store the coordinates in the new DataFrame
+        ## Convert micrometers coordinates to pixel
+        
+        '''
+        new_df['x'] = (df['XMin'] + df['XMax'])/2
+        new_df['y'] = (df['YMin'] + df['YMax'])/2
+        '''
+
+        new_df['x'] = df['x']
+        new_df['y'] = df['y']
+
+        new_df['x (micron)'] = new_df['x'] / resolution_micron
+        new_df['y (micron)'] = new_df['y'] / resolution_micron
+            
+        # new_df['x'] = ((df['XMin_pixel'] + df['XMax_pixel']) / 2)
+        # new_df['y'] = ((df['YMin_pixel'] + df['YMax_pixel']) / 2)
+        
+        new_df['Phenotype'] = df['Phenotype']
+        new_df['Object.Id'] = df['Object.Id']
+        new_df['Classifier.Label'] = df['Classifier.Label']
+
+        '''
+        print(f"\nTotal number of cells: {len(new_df)}")
+        print("--")
+        cell_type_counts = df['Cell_type'].value_counts()
+        for cell_type, count in cell_type_counts.items():
+            print(f"{cell_type}: {count} cells")
+            # cell_coordinates[f'{panel}_panel_{cell_type}'] = new_df[new_df['Cell_type'] == cell_type][['x', 'y']].to_numpy()
+        '''
+        
+        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
+        data_frame_cells[f'{panel}_panel_df'] = new_df
+
+    # Check if it is a table from SPIAT with cell types or not
+    elif all(col in df.columns for col in required_columns_SPIAT):
         # Store the coordinates in the new DataFrame
         ## Convert micrometers coordinates to pixel
         new_df['x (micron)'] = df['x']
@@ -391,62 +430,113 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
     return cell_coordinates, data_frame_cells
 
 
-def get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment):
-    ## Read annotations file
-    gdf = gpd.read_file(geojson_file_path)
-    def safe_json_load(x):
-        if isinstance(x, dict):  # If it's already a dictionary, return it as is
-            return x
-        elif isinstance(x, str):  # If it's a string, try to parse it as JSON
-            try:
-                return json.loads(x)
-            except json.JSONDecodeError:
-                return {}  # Return an empty dictionary for invalid rows
-        else:  # If it's neither, return an empty dictionary
-            return {}
-    gdf['classification'] = gdf['classification'].apply(safe_json_load)
-    '''
-    # print(gdf['classification'].apply(lambda x: x.get('name')).unique())
-    ## Convert LineString to Polygon
-    gdf_poly = gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
-    fig, ax = plt.subplots(figsize=(6, 6)) 
-    gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
-    ax.axis('off')
-    ax.invert_yaxis()
-    '''
+def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment):
+    if annotation_file_path.endswith(".annotations"):
+        # Parse the XML file
+        tree = ET.parse(annotation_file_path)
+        root = tree.getroot()
 
-    ## Check for the annotation types (non-case sensitive)
-    Annotations_classification = ['Artefacts', 'Manual_Artefacts', 'Empty']
-    artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in Annotations_classification])]
-    # print(artefacts_empty_gdf['classification'].apply(lambda x: x.get('name')).unique())
-    ## Convert LineString to Polygon
-    artefacts_empty_gdf_poly = artefacts_empty_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
-    '''
-    fig, ax = plt.subplots(figsize=(6, 6)) 
-    artefacts_empty_gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
-    ax.axis('off')
-    ax.invert_yaxis()
-    plt.show()
-    '''
-    artefacts_empty_alignment[panel] = artefacts_empty_gdf_poly
+        # Define classification categories and convert them to lowercase (case-insensitive)
+        annotations_classification = {cls.lower() for cls in ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']}
+        # Filter artefacts, manual artefacts, empty, and no tissue
+        gdf = get_gdf_from_annot(root, annotations_classification)
+        artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
+        artefacts_empty_alignment[panel] = artefacts_empty_gdf["geometry"]
 
-    ## Get the analysis area annotation
-    analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name') in ['Analysis_area'])]
-    analysis_area_gdf['classification'].apply(lambda x: x.get('name')).unique()
-    # Convert LineString to Polygon
-    analysis_area_gdf_poly = analysis_area_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
-    '''
-    fig, ax = plt.subplots(figsize=(6, 6)) 
-    analysis_area_gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
-    ax.axis('off')
-    ax.invert_yaxis()
-    plt.show()
-    '''
-    analysis_area_alignment[panel] = analysis_area_gdf_poly
+
+        # Define classification categories and convert them to lowercase (case-insensitive)
+        annotations_classification = {cls.lower() for cls in ['Analysis_area']}
+        # Filter analysis area
+        gdf = get_gdf_from_annot(root, annotations_classification)
+        analysis_area_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
+        analysis_area_alignment[panel] = analysis_area_gdf["geometry"]
+
+
+
+    if annotation_file_path.endswith(".geojson"):
+        ## Read annotations file
+        gdf = gpd.read_file(annotation_file_path)
+        def safe_json_load(x):
+            if isinstance(x, dict):  # If it's already a dictionary, return it as is
+                return x
+            elif isinstance(x, str):  # If it's a string, try to parse it as JSON
+                try:
+                    return json.loads(x)
+                except json.JSONDecodeError:
+                    return {}  # Return an empty dictionary for invalid rows
+            else:  # If it's neither, return an empty dictionary
+                return {}
+        gdf['classification'] = gdf['classification'].apply(safe_json_load)
+        '''
+        # print(gdf['classification'].apply(lambda x: x.get('name')).unique())
+        ## Convert LineString to Polygon
+        gdf_poly = gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
+        fig, ax = plt.subplots(figsize=(6, 6)) 
+        gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+        ax.axis('off')
+        ax.invert_yaxis()
+        '''
+
+        ## Check for the annotation types (non-case sensitive)
+        Annotations_classification = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']
+        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in Annotations_classification])]
+        # print(artefacts_empty_gdf['classification'].apply(lambda x: x.get('name')).unique())
+        ## Convert LineString to Polygon
+        artefacts_empty_gdf_poly = artefacts_empty_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
+        '''
+        fig, ax = plt.subplots(figsize=(6, 6)) 
+        artefacts_empty_gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+        ax.axis('off')
+        ax.invert_yaxis()
+        plt.show()
+        '''
+        artefacts_empty_alignment[panel] = artefacts_empty_gdf_poly
+
+        ## Get the analysis area annotation
+        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name') in ['Analysis_area'])]
+        analysis_area_gdf['classification'].apply(lambda x: x.get('name')).unique()
+        # Convert LineString to Polygon
+        analysis_area_gdf_poly = analysis_area_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
+        '''
+        fig, ax = plt.subplots(figsize=(6, 6)) 
+        analysis_area_gdf_poly.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+        ax.axis('off')
+        ax.invert_yaxis()
+        plt.show()
+        '''
+        analysis_area_alignment[panel] = analysis_area_gdf_poly
 
     return artefacts_empty_alignment, analysis_area_alignment
 
+def get_gdf_from_annot(root, annotations_classification):
+    # List to store annotation polygons
+    geometries = []
+    classification_labels = []
+    
+    for annotation in root.findall(".//Annotation"):
+        annotation_name = annotation.get("Name")
+    
+        # Check if annotation matches classification categories (case-insensitive)
+        if annotation_name and annotation_name.lower() in annotations_classification:
+            print(f"Matched classification: {annotation_name}")
+    
+            # Extract coordinates of the region
+            regions = annotation.findall(".//Region")
+            
+            for region in regions:
+                vertices = region.findall(".//V")
+                points = [(int(vertex.get("X")), int(vertex.get("Y"))) for vertex in vertices]
+    
+                # Ensure at least 3 points to form a polygon
+                if len(points) >= 3:
+                    polygon = Polygon(points)
+                    geometries.append(polygon)
+                    classification_labels.append(annotation_name)
+    
+    # Create a GeoDataFrame
+    gdf = gpd.GeoDataFrame({"classification": classification_labels, "geometry": geometries})
 
+    return gdf
 
 
 def alignment_report(id, name_alignment, panels, cell_coordinates, metadata_images, output_path, alpha_red, img1_resize, img2_resize, simg2_Rigid, outTx_Rigid, outTx_Bspline_dict, simg2_dict, execution_time_dict, metric_values_dict, spline_order, resolution_micron, pixel_size_raster_micron, metric_ms_alignment, img_resize_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment):
@@ -1322,9 +1412,14 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     # Original DataFrame
     df_cells = data_frame_cells[f'{panels_alignment[0]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
-    required_columns = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
+    required_columns = ['Phenotype', 'Object.Id', 'Classifier.Label']
+    required_columns_SPIAT = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
     # Check if all required columns are present in df
     if all(col in df_cells.columns for col in required_columns):
+        filtered_df = df_cells.loc[filtered_ids, ['Phenotype', 'Object.Id', 'Classifier.Label']].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Phenotype', 'Classifier.Label', 'Object.Id']]
+    elif all(col in df_cells.columns for col in required_columns_SPIAT):
         filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
@@ -1372,9 +1467,14 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     # Original DataFrame
     df_cells = data_frame_cells[f'{panels_alignment[1]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
-    required_columns = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
+    required_columns = ['Phenotype', 'Object.Id', 'Classifier.Label']
+    required_columns_SPIAT = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
     # Check if all required columns are present in df
     if all(col in df_cells.columns for col in required_columns):
+        filtered_df = df_cells.loc[filtered_ids, ['Phenotype', 'Object.Id', 'Classifier.Label']].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Phenotype', 'Classifier.Label', 'Object.Id']]
+    elif all(col in df_cells.columns for col in required_columns_SPIAT):
         filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
@@ -1395,7 +1495,7 @@ def save_tables(merged_cell_coordinates, output_path, id):
     if 'Cell_type' in merged_cell_coordinates.columns:
         merged_cell_coordinates["label"] = merged_cell_coordinates.index
         merged_cell_coordinates.rename(columns={"Classifier Label": "Classifier_Label"}, inplace=True)
-        merged_cell_coordinates.drop(columns=["Object Id"], inplace=True)
+        # merged_cell_coordinates.drop(columns=["Object Id"], inplace=True)
         print("Combined phenotypes:")
         print(np.unique(merged_cell_coordinates['Cell_type']))
 

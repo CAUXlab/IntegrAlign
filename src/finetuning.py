@@ -1,5 +1,6 @@
 import pickle
 import os
+import fnmatch
 import time
 import sys
 import json
@@ -11,6 +12,8 @@ import warnings
 
 import SimpleITK as sitk # type: ignore
 from tifffile import TiffFile # type: ignore
+from tifffile.tiffcomment import tiffcomment
+from xml.etree import ElementTree
 import napari # type: ignore
 import vispy.color
 from shapely.geometry import mapping, Polygon
@@ -20,7 +23,7 @@ from src.alignment import remove_params, extract_downscaled_images
 from src.alignment import get_cells_coordinates_SPIAT_CellType, get_annotations
 from src.alignment import alignment_report
 
-from src.save_images import panels_name_alignment
+from src.save_images import panels_name_alignment, generate_channels_list
 
 from src.alignment import merge_annotations, get_gdf, transform_annotation, rotate_coordinates_angle, scale_multipolygon_coordinates, plot_multipolygon
 from src.alignment import transform_filter_coordinates, filter_coordinates
@@ -83,10 +86,15 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotati
             annotations = annotations_tables[index]
             # Get the file path corresponding to id
             csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
-            geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+            # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+            annotation_file_path = next(
+                (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                None
+            )
             ## Get the coordinates table and annotations
             cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
-            artefacts_empty_alignment, analysis_area_alignment = get_annotations(geojson_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
         ## Create the alignment report
         print("Creating the alignment report...")
         outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment = alignment_report(id, name_alignment, panels_alignment, cell_coordinates, metadata_images, output_path, 
@@ -329,42 +337,60 @@ def getLabels(tif_tags, nb_channels):
 
     return channel_list, dictionary
 
-def load_QPTIFF_high_res(path):
-    # Load qptiff file
-    with TiffFile(path) as tif:
-        # Get tags from DAPI channel in .pages
-        tif_tags = {}
-        for tag in tif.pages[0].tags.values():
-            name, value = tag.name, tag.value
-            tif_tags[name] = value
-        # get nb of channels
-        last_indexes = 10
-        im_sizes = []
-        for im in tif.pages[-last_indexes:]:  
-            im_sizes.append(len(im.asarray()))
-        from collections import Counter
-        count_dict = Counter(im_sizes)
-        nb_channels = max(count_dict.values())
-        # Load array with every channel
-        index_first_channel_second_downscaling = nb_channels*2+1 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation) to get to the first channel of the second downscaling
-        index_last_channel_second_downscaling = nb_channels*3+1 # 8 channels, 1 low res RGB, 8 channels (first downscaling of the pyramid representation), 8 channels (second downscaling of the pyramid representation) to get to the last channel of the second downscaling
-        img_data = np.stack([tif.pages[i].asarray() for i in range(index_first_channel_second_downscaling, index_last_channel_second_downscaling)], axis=0)
-        # img_data = tif.series[0].asarray()
-        
-    channel_list, channel_name_dictionary = getLabels(tif_tags, nb_channels)
-    
-    return img_data, tif_tags, channel_list, channel_name_dictionary
+def load_QPTIFF_high_res(path_scan):
+    tif = TiffFile(path_scan)
+    tif_tags = {tag.name: tag.value for tag in tif.pages[0].tags.values()}
+    # Parse the XML content
+    xml_content = tif_tags.get("ImageDescription", "").replace("\r\n", "").replace("\t", "")
+    channels = generate_channels_list(xml_content)
+    # Load the second compressed image channels in .pages
+    img_data = tif.series[0].levels[2].asarray()
+    sizeX_fullres2 = tif_tags['ImageLength']
+    sizeX_compressed2 = img_data[0].shape[0]
+
+    return channels, img_data, sizeX_compressed2, sizeX_fullres2
+
+def load_TIF_high_res(path_scan):
+    tif = TiffFile(path_scan, is_ome=False)
+    xml = tiffcomment(path_scan)
+    root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
+    sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
+    # Load the second compressed image channels in .levels
+    img_data = tif.series[0].levels[2].asarray()
+    print(img_data.shape)
+    sizeX_fullres = int(sizeX[0])
+    sizeX_compressed = int(sizeX[2])
+    channels = [
+        {"id": elem.get("id"), "name": elem.get("name"), "rgb": elem.get("rgb")}
+        for elem in root.iter() if elem.tag == "channel"
+    ]
+    return channels, img_data, sizeX_compressed, sizeX_fullres
 
 
 def load_high_res_imgs(folder_path1, folder_path2, id, panels):
-    # Define path of the qptiff
-    path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
-    path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
+    # Define path of the qptiff or tiff
+    path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
+    path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
 
-    img1_data, tif_tags1, channel_list1, channel_name_dictionary1 = load_QPTIFF_high_res(path1)
-    img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_QPTIFF_high_res(path2)
+    #path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
+    #path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
+
+    # img1_data, tif_tags1, channel_list1, channel_name_dictionary1 = load_QPTIFF_high_res(path1)
+    # img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_QPTIFF_high_res(path2)
     
-    
+    if path1.endswith('.qptiff') and path2.endswith('.qptiff'):
+        print(f"Loading .qptiff images...")
+        ## Load images
+        channels1, img1_data, sizeX_compressed1, sizeX_fullres1 = load_QPTIFF_high_res(path1)
+        channels2, img2_data, sizeX_compressed2, sizeX_fullres2 = load_QPTIFF_high_res(path2)
+
+    elif path1.endswith('.tif') and path2.endswith('.tif'):
+        print(f"Loading .tif images...")
+        channels1, img1_data, sizeX_compressed1, sizeX_fullres1 = load_TIF_high_res(path1)
+        channels2, img2_data, sizeX_compressed2, sizeX_fullres2 = load_TIF_high_res(path2)
+
+    scale_percent1 = sizeX_compressed1/sizeX_fullres1
+    scale_percent2 = sizeX_compressed2/sizeX_fullres2
 
     '''
     # Saving full resolution images
@@ -372,14 +398,13 @@ def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     np.save(dir_res + f"{id}/{folder_name_alignment}/results/img2_data_{id}_panel_{panels[0]}.npy", img2_data)
     '''
 
-    return img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2
+    return img1_data, channels1, img2_data, channels2
 
 
 
 def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment = None, artefacts_empty_alignment = None, shapes_data_alignment=None, shapes_transformed=None, full_res=None):
-    print(f"Loading .qptiff images...")
     panels = name_alignment.split('_')
-    img1_data, tif_tags1, channel_list1, channel_name_dictionary1, img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_high_res_imgs(scan_path1, scan_path2, id, panels)
+    img1_data, channels1, img2_data, channels2 = load_high_res_imgs(scan_path1, scan_path2, id, panels)
     scale_percent1 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[0]}"]
     scale_percent2 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[1]}"]
     crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
@@ -408,39 +433,43 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     ## Image full resolution but lags
     # full_res=True
     
+    def int_to_rgb(value):
+        value = int(value)
+        r = (value >> 16) & 255
+        g = (value >> 8) & 255
+        b = value & 255
+        return [r / 255.0, g / 255.0, b / 255.0]  # Normalize
+
 
     viewer1 = napari.Viewer()
     viewer1.title = panels[0]
-    for i in range(len(channel_list1)):
-        wavelength = int(list(channel_name_dictionary1.values())[i])
-        rgb_values = wavelength_to_rgb(wavelength)
+    for i, channel in enumerate(channels1):
+        rgb_values = int_to_rgb(channel['rgb'])
         colorMap = vispy.color.Colormap([[0.0, 0.0, 0.0], rgb_values])
         if full_res:
             rlayer = viewer1.add_image([img1_data[i],
-                                       img1_data[i][::4, ::4],
-                                       img1_data[i][::8, ::8]],
-                                       name=channel_list1[i], contrast_limits=[0, 255])
+                                    img1_data[i][::4, ::4],
+                                    img1_data[i][::8, ::8]],
+                                    name=channel['name'], contrast_limits=[0, 255])
         else:
             rlayer = viewer1.add_image(img1_data[i],
-                           name=channel_list1[i], contrast_limits=[0, 255])
+                        name=channel['name'], contrast_limits=[0, 255])
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap
         
     viewer2 = napari.Viewer()
     viewer2.title = panels[1]
-    for i in range(len(channel_list2)):
-        wavelength = int(list(channel_name_dictionary2.values())[i])
-        rgb_values = wavelength_to_rgb(wavelength)
+    for i, channel in enumerate(channels2):
+        rgb_values = int_to_rgb(channel['rgb'])
         colorMap = vispy.color.Colormap([[0.0, 0.0, 0.0], rgb_values])
         if full_res:
             rlayer = viewer2.add_image([img2_data[i],
-                                       img2_data[i][::4, ::4],
-                                       img2_data[i][::8, ::8]],
-                                       name=channel_list2[i], contrast_limits=[0, 255])
+                                    img2_data[i][::4, ::4],
+                                    img2_data[i][::8, ::8]],
+                                    name=channel['name'], contrast_limits=[0, 255])
         else:
             rlayer = viewer2.add_image(img2_data[i],
-                           name=channel_list2[i], contrast_limits=[0, 255])
-        
+                        name=channel['name'], contrast_limits=[0, 255])
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap
     

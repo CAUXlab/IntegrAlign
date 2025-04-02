@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import Button, Canvas
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageEnhance
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class ImageCropperApp:
@@ -16,10 +17,15 @@ class ImageCropperApp:
         self.img1_8bit = img1
         self.img2_8bit = img2
         
-
         # Convert numpy arrays to PIL images
         self.img1 = self.array_to_image(img1)
         self.img2 = self.array_to_image(img2)
+
+        ## Increase brightness manually before displaying 
+        # To compensate the grayscale to RGB conversion for tkinter
+        brightness_factor = 5
+        self.img1 = self.adjust_brightness(self.img1, brightness_factor)
+        self.img2 = self.adjust_brightness(self.img2, brightness_factor)
 
         # Store original image sizes
         self.original_img1 = self.img1.copy()
@@ -30,7 +36,6 @@ class ImageCropperApp:
         self.canvas_height = 400
         self.img1_resized = self.resize_image(self.img1, self.canvas_width, self.canvas_height)
         self.img2_resized = self.resize_image(self.img2, self.canvas_width, self.canvas_height)
-
 
         # Create Canvases
         self.canvas1 = Canvas(root, width=self.canvas_width, height=self.canvas_height)
@@ -101,7 +106,12 @@ class ImageCropperApp:
 
     def array_to_image(self, img_array):
         """Convert numpy array to PIL image (assuming grayscale)."""
-        return Image.fromarray(img_array)
+        return Image.fromarray(img_array).convert("L")
+    
+    def adjust_brightness(self, pil_image, factor):
+        """Increase brightness of grayscale image while preserving mode."""
+        enhancer = ImageEnhance.Brightness(pil_image)
+        return enhancer.enhance(factor)  # Factor > 1 brightens, < 1 darkens
 
     def resize_image(self, img, width, height):
         img.thumbnail((width, height), Image.Resampling.LANCZOS)
@@ -166,8 +176,12 @@ class ImageCropperApp:
             self.cropped_images[self.panels[0]] = (cropped_img1, (orig_x1, orig_y1))
 
             # Update canvas
-            self.img1_resized = self.array_to_image(cropped_img1)
-            self.img1_resized = self.resize_image(self.img1_resized, self.canvas_width, self.canvas_height)
+            self.img1 = self.array_to_image(cropped_img1)
+            # Increase brightness manually before displaying to compensate the grayscale to RGB conversion for tkinter
+            brightness_factor = 5
+            self.img1 = self.adjust_brightness(self.img1, brightness_factor)
+
+            self.img1_resized = self.resize_image(self.img1, self.canvas_width, self.canvas_height)
             self.img1_tk = ImageTk.PhotoImage(self.img1_resized)
             self.canvas1.delete("all")
             self.canvas1.create_image(0, 0, anchor=tk.NW, image=self.img1_tk)
@@ -187,8 +201,12 @@ class ImageCropperApp:
 
             self.cropped_images[self.panels[1]] = (cropped_img2, (orig_x1, orig_y1))
 
-            self.img2_resized = self.array_to_image(cropped_img2)
-            self.img2_resized = self.resize_image(self.img2_resized, self.canvas_width, self.canvas_height)
+            self.img2 = self.array_to_image(cropped_img2)
+            # Increase brightness manually before displaying to compensate the grayscale to RGB conversion for tkinter
+            brightness_factor = 5
+            self.img2 = self.adjust_brightness(self.img2, brightness_factor)
+
+            self.img2_resized = self.resize_image(self.img2, self.canvas_width, self.canvas_height)
             self.img2_tk = ImageTk.PhotoImage(self.img2_resized)
             self.canvas2.delete("all")
             self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.img2_tk)
