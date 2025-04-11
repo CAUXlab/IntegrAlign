@@ -525,6 +525,150 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     # Create an empty layer for translated points in viewer2
     viewer2.add_points([], face_color='red', size=10, name='Translated Points')
 
+    def add_polygons_to_viewer(geometry_list, scale_percent, scale_percent_napari, viewer, edge_color, face_color, opacity, name):
+        all_coords = []
+        for single_polygon in geometry_list:
+            if single_polygon.is_empty:
+                continue
+
+            single_polygon = single_polygon.buffer(0)
+
+            if single_polygon.geom_type == 'Polygon':
+                polygons = [single_polygon]
+            elif single_polygon.geom_type == 'MultiPolygon':
+                polygons = list(single_polygon.geoms)
+            else:
+                continue
+
+            for poly in polygons:
+                coords = (np.array(poly.exterior.coords) * scale_percent) / scale_percent_napari
+                coords = coords[:, [1, 0]]  # Invert x/y for Napari
+                if coords.shape[0] > 2:
+                    all_coords.append(coords)
+
+        if all_coords:
+            viewer.add_shapes(
+                all_coords,
+                shape_type='polygon',
+                edge_color=edge_color,
+                face_color=face_color,
+                opacity=opacity,
+                edge_width=10,
+                name=name
+            )
+
+    if analysis_area_alignment:
+        for geometry, scale_percent, scale_percent_napari, viewer in [
+            (analysis_area_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
+            (analysis_area_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
+        ]:
+            add_polygons_to_viewer(
+                geometry,
+                scale_percent,
+                scale_percent_napari,
+                viewer,
+                edge_color='green',
+                face_color='gray',
+                opacity=0.3,
+                name="Analysis area"
+            )
+
+    if artefacts_empty_alignment:
+        for geometry, scale_percent, scale_percent_napari, viewer in [
+            (artefacts_empty_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
+            (artefacts_empty_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
+        ]:
+            add_polygons_to_viewer(
+                geometry,
+                scale_percent,
+                scale_percent_napari,
+                viewer,
+                edge_color='transparent',
+                face_color='red',
+                opacity=0.5,
+                name="Artefacts/ Empty area"
+            )
+
+
+
+    '''
+    if analysis_area_alignment:
+
+        for idx, (geometry, scale_percent, scale_percent_napari, viewer) in enumerate([
+            (analysis_area_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
+            (analysis_area_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
+        ]):
+            all_coords = []
+            for single_polygon in geometry:
+                if single_polygon.is_empty:
+                    continue
+
+                single_polygon = single_polygon.buffer(0)
+
+                if single_polygon.geom_type == 'Polygon':
+                    polygons = [single_polygon]
+                elif single_polygon.geom_type == 'MultiPolygon':
+                    polygons = list(single_polygon.geoms)
+                else:
+                    continue
+
+                for poly in polygons:
+                    coords = (np.array(poly.exterior.coords) * scale_percent) / scale_percent_napari
+                    coords = coords[:, [1, 0]]  # invert x/y
+                    if coords.shape[0] > 2:
+                        all_coords.append(coords)
+
+            # Add all polygons at once for this viewer
+            if all_coords:
+                viewer.add_shapes(
+                    all_coords,
+                    shape_type='polygon',
+                    edge_color='green',
+                    face_color='gray',
+                    opacity=0.3,
+                    edge_width=10,
+                    name="Analysis area"
+                )
+
+    if artefacts_empty_alignment:
+
+        for idx, (geometry, scale_percent, scale_percent_napari, viewer) in enumerate([
+            (artefacts_empty_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
+            (artefacts_empty_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
+        ]):
+            all_coords = []
+            for single_polygon in geometry:
+                if single_polygon.is_empty:
+                    continue
+
+                single_polygon = single_polygon.buffer(0)
+
+                if single_polygon.geom_type == 'Polygon':
+                    polygons = [single_polygon]
+                elif single_polygon.geom_type == 'MultiPolygon':
+                    polygons = list(single_polygon.geoms)
+                else:
+                    continue
+
+                for poly in polygons:
+                    coords = (np.array(poly.exterior.coords) * scale_percent) / scale_percent_napari
+                    coords = coords[:, [1, 0]]  # invert x/y
+                    if coords.shape[0] > 2:
+                        all_coords.append(coords)
+
+            # Add all polygons at once for this viewer
+            if all_coords:
+                viewer.add_shapes(
+                    all_coords,
+                    shape_type='polygon',
+                    edge_color='red',
+                    face_color='red',
+                    opacity=0.5,
+                    edge_width=10,
+                    name="Artefacts/ Empty area"
+                )
+    '''
+    '''
     if analysis_area_alignment:
         geometry = analysis_area_alignment[panels_alignment[0]]
         # Loop through all geometries in the GeoSeries
@@ -596,7 +740,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
                     # Add the sub-polygon to the viewer
                     if coords.shape[0] > 2:
                         viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-
+    '''
     '''
     if artefacts_empty_alignment:
         geometry = artefacts_empty_alignment[panels_alignment[0]]

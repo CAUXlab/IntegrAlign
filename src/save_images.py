@@ -303,7 +303,7 @@ def load_downscaled_imgs(folder_path1, folder_path2, id):
         ## Load images
         channels1, img1_resize, sizeX_compressed1, sizeX_fullres1 = get_data_alignment_qptiff(path1)
         channels2, img2_resize, sizeX_compressed2, sizeX_fullres2 = get_data_alignment_qptiff(path2)
-
+    
     elif path1.endswith('.tif') and path2.endswith('.tif'):
         channels1, img1_resize, sizeX_compressed1, sizeX_fullres1 = get_data_alignment_tif(path1)
         channels2, img2_resize, sizeX_compressed2, sizeX_fullres2 = get_data_alignment_tif(path2)
@@ -312,7 +312,7 @@ def load_downscaled_imgs(folder_path1, folder_path2, id):
     scale_percent2 = sizeX_compressed2/sizeX_fullres2
 
     img1_resize, scale_percent1, img2_resize, scale_percent2 = get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, path2, img2_resize, scale_percent2, sizeX_fullres2)
-
+    
 
     # Scale images to 8bit
     img1_8bit = cv2.convertScaleAbs(img1_resize)
@@ -343,10 +343,10 @@ def get_data_alignment_qptiff(path_scan):
     channels = generate_channels_list(xml_content)
     # Load the most compressed DAPI image in .pages
     img_resize = tif.series[0].levels[-1].asarray()[0]
-    sizeX_fullres2 = tif_tags['ImageLength']
-    sizeX_compressed2 = img_resize.shape[0]
+    sizeX_fullres = tif_tags['ImageLength']
+    sizeX_compressed = img_resize.shape[0]
 
-    return channels, img_resize, sizeX_compressed2, sizeX_fullres2
+    return channels, img_resize, sizeX_compressed, sizeX_fullres
 
 def extract_json_from_xml(xml_content):
     """Extracts JSON content from an XML element that contains it as text."""
@@ -404,9 +404,10 @@ def get_data_alignment_tif(path_scan):
     img_resize = tif.series[0].levels[-1].asarray()[0]
     xml = tiffcomment(path_scan)
     root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
-    sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
-    sizeX_fullres = int(sizeX[0])
-    sizeX_compressed = int(sizeX[-1])
+    # Get the size of the full image resolution this way because "sizeX" don't give the same sizes
+    sizeX_fullres = tif.series[0].levels[0].asarray()[0].shape[0]
+    sizeX_compressed = img_resize.shape[0]
+    # sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
     channels = [
         {"id": elem.get("id"), "name": elem.get("name"), "rgb": elem.get("rgb")}
         for elem in root.iter() if elem.tag == "channel"
@@ -415,8 +416,8 @@ def get_data_alignment_tif(path_scan):
 
 def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, path2, img2_resize, scale_percent2, sizeX_fullres2):
     # print("Compression")
-    comp_lvl1 = int((1/scale_percent1))
-    comp_lvl2 = int((1/scale_percent2))
+    comp_lvl1 = round((1/scale_percent1))
+    comp_lvl2 = round((1/scale_percent2))
     # print(f"img1: 1/{comp_lvl1}ème")
     # print(f"img2: 1/{comp_lvl2}ème")
 
@@ -429,7 +430,7 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, pat
             index_comp-=1
             img1_resize = tif.series[0].levels[index_comp].asarray()[0]
             scale_percent1 = img1_resize.shape[0] / sizeX_fullres1
-            comp_lvl1 = int((1/scale_percent1))
+            comp_lvl1 = round((1/scale_percent1))
             print("Finding the correct compression")
             print(f"img1: 1/{comp_lvl1}ème")
             print(f"img2: 1/{comp_lvl2}ème")
@@ -441,13 +442,49 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, pat
             index_comp-=1
             img2_resize = tif.series[0].levels[index_comp].asarray()[0]
             scale_percent2 = img2_resize.shape[0] / sizeX_fullres2
-            comp_lvl2 = int((1/scale_percent2))
+            comp_lvl2 = round((1/scale_percent2))
             print("Finding the correct compression")
             print(f"img1: 1/{comp_lvl1}ème")
             print(f"img2: 1/{comp_lvl2}ème")
     
     return img1_resize, scale_percent1, img2_resize, scale_percent2
-
+'''
+def get_same_compression(path1, img1_resize, scale_percent1, sizeX1, path2, img2_resize, scale_percent2, sizeX2):
+    # print("Compression")
+    comp_lvl1 = round((1/scale_percent1))
+    comp_lvl2 = round((1/scale_percent2))
+    # print(f"img1: 1/{comp_lvl1}ème")
+    # print(f"img2: 1/{comp_lvl2}ème")
+    print(sizeX1)
+    print(sizeX2)
+    # Check if both images are the same size
+    if comp_lvl2 < comp_lvl1:
+        index_comp = -1
+        print(f"Patient {id}: Not same compression level")
+        tif = TiffFile(path1)
+        while comp_lvl2 < comp_lvl1:
+            index_comp-=1
+            img1_resize = tif.series[0].levels[index_comp].asarray()[0]
+            scale_percent1 = int(sizeX1[index_comp]) / int(sizeX1[0])
+            comp_lvl1 = round((1/scale_percent1))
+            print("Finding the correct compression")
+            print(f"img1: 1/{comp_lvl1}ème")
+            print(f"img2: 1/{comp_lvl2}ème")
+    if comp_lvl1 < comp_lvl2:
+        index_comp = -1
+        print(f"Patient {id}: Not same compression level")
+        tif = TiffFile(path2)
+        while comp_lvl1 < comp_lvl2:
+            index_comp-=1
+            img2_resize = tif.series[0].levels[index_comp].asarray()[0]
+            scale_percent2 = int(sizeX2[index_comp]) / int(sizeX2[0])
+            comp_lvl2 = round((1/scale_percent2))
+            print("Finding the correct compression")
+            print(f"img1: 1/{comp_lvl1}ème")
+            print(f"img2: 1/{comp_lvl2}ème")
+    
+    return img1_resize, scale_percent1, img2_resize, scale_percent2
+'''
 
 
 def get_polygon(gdf, scale_percent, image_shape, img_resize = None, c = "R"):

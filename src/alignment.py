@@ -14,6 +14,8 @@ from scipy.stats import pearsonr
 from rasterio.transform import from_origin # type: ignore
 from pathlib import Path
 from shapely.geometry import mapping, Polygon, MultiPolygon, Point
+from shapely.geometry import box
+from shapely.plotting import plot_polygon
 import xml.etree.ElementTree as ET
 import geopandas as gpd
 from shapely.ops import unary_union
@@ -345,12 +347,16 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
     
     new_df = pd.DataFrame()
 
-    required_columns = ['Phenotype', 'Classifier.Label', 'Object.Id', 'XMin', 'XMax', 'YMin', 'YMax', 'x', 'y']
+    required_columns = ['Phenotype', 'Classifier.Label', 'Object.Id', 'x', 'y']
 
     required_columns_SPIAT = [
     'x', 'y', 'Phenotype', 'Cell_type', 'ID', 'Tissue_Category',
     'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel' 
     ]
+
+    required_columns_ROI = ['x_', 'y_', 'x', 'y']
+
+    required_columns_HALO = ['XMin', 'XMax', 'YMin', 'YMax']
 
     # Check if it is a table from SPIAT with cell types or not
     if all(col in df.columns for col in required_columns):
@@ -417,14 +423,32 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
         cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
         data_frame_cells[f'{panel}_panel_df'] = new_df
 
-    else:
+    # Check if all required ROI columns are present in the DataFrame
+    elif all(col in df.columns for col in required_columns_ROI):
         new_df = df.copy()
 
         new_df['x (micron)'] = df['x_']
         new_df['y (micron)'] = df['y_']
 
+
         cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
         data_frame_cells[f'{panel}_panel_df'] = new_df
+
+    # Check if all required HALO columns are present in the DataFrame
+    elif all(col in df.columns for col in required_columns_HALO):
+        new_df = df.copy()
+
+        new_df['x'] = (df['XMin'] + df['XMax'])/2
+        new_df['y'] = (df['YMin'] + df['YMax'])/2
+
+        new_df['x (micron)'] = new_df['x'] / resolution_micron
+        new_df['y (micron)'] = new_df['y'] / resolution_micron
+
+        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
+        data_frame_cells[f'{panel}_panel_df'] = new_df
+
+    else:
+        raise ValueError("The tables are not in the correct format.\n Required columns : ['Phenotype', 'Classifier.Label', 'Object.Id', 'x', 'y'] or simply ['XMin', 'XMax', 'YMin', 'YMax']")
 
 
     return cell_coordinates, data_frame_cells
@@ -436,20 +460,59 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
         tree = ET.parse(annotation_file_path)
         root = tree.getroot()
 
-        # Define classification categories and convert them to lowercase (case-insensitive)
-        annotations_classification = {cls.lower() for cls in ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']}
-        # Filter artefacts, manual artefacts, empty, and no tissue
-        gdf = get_gdf_from_annot(root, annotations_classification)
-        artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
-        artefacts_empty_alignment[panel] = artefacts_empty_gdf["geometry"]
-
 
         # Define classification categories and convert them to lowercase (case-insensitive)
-        annotations_classification = {cls.lower() for cls in ['Analysis_area']}
+        annotations_classification = ['Analysis_area']
         # Filter analysis area
         gdf = get_gdf_from_annot(root, annotations_classification)
-        analysis_area_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
-        analysis_area_alignment[panel] = analysis_area_gdf["geometry"]
+        # analysis_area_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
+        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
+        if analysis_area_gdf["geometry"].is_empty.all():
+            analysis_area = False
+        else:
+            analysis_area_alignment[panel] = analysis_area_gdf["geometry"]
+            analysis_area = True
+
+
+
+        # Define classification categories and convert them to lowercase (case-insensitive)
+        annotations_classification = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue', 'Vide']
+        # , 'Artefact', 'Arteract'
+        # 
+        if analysis_area:
+            # Filter artefacts, manual artefacts, empty, and no tissue
+            gdf = get_gdf_from_annot(root, annotations_classification)
+            # artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
+            artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
+            artefacts_empty_alignment[panel] = artefacts_empty_gdf["geometry"]
+        else:
+            # Filter artefacts, manual artefacts, empty, and no tissue
+            gdf = get_gdf_from_annot(root, annotations_classification, NegativeROA = 0)
+            # artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
+            artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
+    
+            # Find the index of the largest shape
+            largest_geometry_index = artefacts_empty_gdf["geometry"].area.idxmax()
+            '''
+            # Get the largest shape
+            largest_geometry_gdf = artefacts_empty_gdf.loc[[largest_geometry_index]]
+            analysis_area_alignment[panel] = largest_geometry_gdf["geometry"]
+            '''
+            # Remove the largest geometry (analysis area) from the artefacts, empty shapes
+            artefacts_empty_alignment[panel] = artefacts_empty_gdf.drop(largest_geometry_index)["geometry"]
+
+            # Filter artefacts, manual artefacts, empty, and no tissue
+            gdf = get_gdf_from_annot(root, annotations_classification, NegativeROA = 1)
+            # artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
+            artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
+            analysis_area_alignment[panel] = artefacts_empty_gdf["geometry"]
+
+
+
+
+
+
+
 
 
 
@@ -479,7 +542,9 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
 
         ## Check for the annotation types (non-case sensitive)
         Annotations_classification = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']
-        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in Annotations_classification])]
+        # artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in Annotations_classification])]
+        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in Annotations_classification))]
+
         # print(artefacts_empty_gdf['classification'].apply(lambda x: x.get('name')).unique())
         ## Convert LineString to Polygon
         artefacts_empty_gdf_poly = artefacts_empty_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
@@ -493,8 +558,8 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
         artefacts_empty_alignment[panel] = artefacts_empty_gdf_poly
 
         ## Get the analysis area annotation
-        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name') in ['Analysis_area'])]
-        analysis_area_gdf['classification'].apply(lambda x: x.get('name')).unique()
+        # analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name') in ['Analysis_area'])]
+        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in ['Analysis_area']))]
         # Convert LineString to Polygon
         analysis_area_gdf_poly = analysis_area_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
         '''
@@ -508,14 +573,33 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
 
     return artefacts_empty_alignment, analysis_area_alignment
 
-def get_gdf_from_annot(root, annotations_classification):
+def get_gdf_from_annot(root, annotations_classification, NegativeROA = "all"):
     # List to store annotation polygons
     geometries = []
     classification_labels = []
     
     for annotation in root.findall(".//Annotation"):
         annotation_name = annotation.get("Name")
+        # Extract coordinates of the region
+        if NegativeROA == 0:
+            regions = annotation.findall(".//Region[@NegativeROA='0']")
+        elif NegativeROA == 1:
+            regions = annotation.findall(".//Region[@NegativeROA='1']")
+        else:
+            regions = annotation.findall(".//Region")
+        for region in regions:
+            vertices = region.findall(".//V")
+            points = [(int(vertex.get("X")), int(vertex.get("Y"))) for vertex in vertices]
+
+            # Ensure at least 3 points to form a polygon
+            if len(points) >= 3:
+                polygon = Polygon(points)
+                geometries.append(polygon)
+                classification_labels.append(annotation_name)
     
+    # Create a GeoDataFrame
+    gdf = gpd.GeoDataFrame({"classification": classification_labels, "geometry": geometries})
+    '''
         # Check if annotation matches classification categories (case-insensitive)
         if annotation_name and annotation_name.lower() in annotations_classification:
             print(f"Matched classification: {annotation_name}")
@@ -535,6 +619,7 @@ def get_gdf_from_annot(root, annotations_classification):
     
     # Create a GeoDataFrame
     gdf = gpd.GeoDataFrame({"classification": classification_labels, "geometry": geometries})
+    '''
 
     return gdf
 
@@ -1176,6 +1261,36 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     else:
         print("No empty or artefact area.")
         mask = outer_boundary
+
+    '''
+    ## Check if there is an analysis area annotation
+    if analysis_area_alignment_list:
+    else:
+        ## Merge the remaining GeoSeries
+        merged_polygons = gpd.GeoSeries(unary_union([g.unary_union for g in artefacts_empty_alignment_list]))
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        merged_polygons.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+        ax.axis('off')
+        ax.invert_yaxis()
+        plt.show()
+
+        # Define an outer boundary with the size of the reference image
+        img_fullres_shape2 = tuple(int(dim / scale_percent2) for dim in image_shape2)
+
+        height, width = img_fullres_shape2
+        outer_boundary = gpd.GeoSeries(box(0, 0, width, height)).unary_union
+
+        # Create a Polygon representing the inner boundary
+        inner_boundary = merged_polygons.unary_union
+
+        # Construct the mask by taking the difference between the outer boundary and inner boundary
+        if inner_boundary:
+            mask = outer_boundary.difference(inner_boundary)
+        else:
+            print("No empty or artefact area.")
+            mask = outer_boundary
+    '''
     
     # Plot the MultiPolygon
     # plot_multipolygon(mask)
@@ -1254,7 +1369,6 @@ def transform_annotation(annotations, scale_percent1, scale_percent2, image_shap
         annotation_TR.append(scaled_pointsTR/scale_percent2)
 
     
-
     '''
     # Convert to polygon object
     polygonsTR = []
@@ -1414,24 +1528,36 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     # Filter the DataFrame by `filtered_ids`
     required_columns = ['Phenotype', 'Object.Id', 'Classifier.Label']
     required_columns_SPIAT = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
+    required_columns_ROI = ['x_', 'y_', 'x', 'y']
+    required_columns_HALO = ['XMin', 'XMax', 'YMin', 'YMax']
+    
     # Check if all required columns are present in df
     if all(col in df_cells.columns for col in required_columns):
         filtered_df = df_cells.loc[filtered_ids, ['Phenotype', 'Object.Id', 'Classifier.Label']].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Phenotype', 'Classifier.Label', 'Object.Id']]
+
     elif all(col in df_cells.columns for col in required_columns_SPIAT):
         filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
-    else:
+
+    elif all(col in df_cells.columns for col in required_columns_ROI):
         # Get all columns in df_cells except for 'x' and 'y'
         columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
         filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
 
+    elif all(col in df_cells.columns for col in required_columns_HALO):
+        # Get all columns in df_cells except for 'x' and 'y'
+        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'XMin', 'XMax', 'YMin', 'YMax']]
+        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
     filtered_df['Panel'] = panels_alignment[0]
     merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
+
     
     return merged_cell_coordinates
 
@@ -1469,24 +1595,37 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     # Filter the DataFrame by `filtered_ids`
     required_columns = ['Phenotype', 'Object.Id', 'Classifier.Label']
     required_columns_SPIAT = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
+    required_columns_ROI = ['x_', 'y_', 'x', 'y']
+    required_columns_HALO = ['XMin', 'XMax', 'YMin', 'YMax']
+
     # Check if all required columns are present in df
     if all(col in df_cells.columns for col in required_columns):
         filtered_df = df_cells.loc[filtered_ids, ['Phenotype', 'Object.Id', 'Classifier.Label']].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Phenotype', 'Classifier.Label', 'Object.Id']]
+
     elif all(col in df_cells.columns for col in required_columns_SPIAT):
         filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
-    else:
+
+    elif all(col in df_cells.columns for col in required_columns_ROI):
         # Get all columns in df_cells except for 'x' and 'y'
-        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin', 'XMax', 'YMin', 'YMax']]
+        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
+        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
+        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
+        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
+
+    elif all(col in df_cells.columns for col in required_columns_HALO):
+        # Get all columns in df_cells except for 'x' and 'y'
+        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'XMin', 'XMax', 'YMin', 'YMax']]
         filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
         filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
         filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
 
     filtered_df['Panel'] = panels_alignment[1]
-    merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
+    merged_cell_coordinates = pd.concat([merged_cell_coordinates.loc[:,~merged_cell_coordinates.columns.duplicated()].reset_index(drop=True), filtered_df.loc[:,~filtered_df.columns.duplicated()].reset_index(drop=True)], ignore_index=True)
+    # merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
 
     return merged_cell_coordinates
 
@@ -1498,6 +1637,9 @@ def save_tables(merged_cell_coordinates, output_path, id):
         # merged_cell_coordinates.drop(columns=["Object Id"], inplace=True)
         print("Combined phenotypes:")
         print(np.unique(merged_cell_coordinates['Cell_type']))
+    # put panel after transformed coordinates for readability with HALO files
+    panel = merged_cell_coordinates.pop('Panel')
+    merged_cell_coordinates.insert(2, 'Panel', panel)
 
     merged_cell_coordinates.to_csv(output_path + f"Alignment/merged_tables/{id}_merged_cell_coordinates.csv", index=False)
 
