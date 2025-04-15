@@ -49,7 +49,7 @@ pip install .
 Once you have activated your virtual environment and installed the necessary dependencies, you can run the first step of the tool by using:
 
 ```bash
-python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --panels T DC TLS --output "output/"
+python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --namesAnnotationsEmpty Artefacts Manual_Artefacts Empty No_tissue --panels T DC TLS --output "output/"
 ```
 
 This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help to determine which slides cannot be aligned and if some panels need to be rotated for best alignment.
@@ -59,6 +59,8 @@ This steps will create a report file ```images_report.html``` that plots every p
 --scans - 2 or 3 paths to the folders of each panel that contains the .qptiff files of every patients.
 
 --annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Optional.
+
+--namesAnnotationsEmpty - Names of the empty areas in the annotations files.
 
 --panels - Panel names.
 
@@ -71,7 +73,7 @@ Notes : **The order is crucial** for --scans, --annotations and --panels options
 This steps will preprocess the data (downscaling and rotation) and save the images without excluded patients. This will generate a file containing downscaled images, allowing for alignment processing without needing access to the ```.qptiff``` files. An excel file (```Alignments_validated.xlsx```) will also be generated to track the validation status of each registration after the alignment step completed.
 
 ```bash
-python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 02006 06001 08006 --rotate 01008_DC_2
+python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 02006 06001 08006
 ```
 
 <ins>Options:</ins>
@@ -80,9 +82,6 @@ python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 0200
 
 --exclude - Patient IDs to exclude from alignment.
 
---rotate - Image to rotate with the rotation parameter. Rotation parameters: turn 90 degrees clock wise (1), 180 degrees (2) or 90 degrees counter clock wise (3).
-
-Notes : You provide strings to the --rotate option. For example, "01008_DC_2" will rotate the scan of the DC panel for the patient with ID 01008 by 180 degrees.
 
 ### 3 Alignment
 
@@ -93,7 +92,7 @@ Indeed this step run different alignment for different mesh size and then the op
 This can be run in a cluster computing environment using the ```params.json```, ```downscaled_images.pkl``` and the coordinate tables files.
 
 ```bash
-python main_IntegrAlign.py align --dwnscimg "output/downscaled_images.pkl" --tables "T/Cell_positions/" "DC/Cell_positions/" "TLS/Cell_positions/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/"
+python main_IntegrAlign.py align --dwnscimg "output/downscaled_images.pkl" --tables "T/Cell_positions/" "DC/Cell_positions/" "TLS/Cell_positions/"
 ```
 
 <ins>Options:</ins>
@@ -101,8 +100,6 @@ python main_IntegrAlign.py align --dwnscimg "output/downscaled_images.pkl" --tab
 --dwnscimg - Paths to the downscaled images file (.pkl).
 
 --tables - Paths to 2 or 3 panel folders of the coordinate tables (.csv). Keep the same order used in the visualize step.
-
---annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.
 
 --resolution - Resolution in µm (optional). Value by default : 2.012948251135
 
