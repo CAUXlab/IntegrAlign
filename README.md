@@ -60,7 +60,7 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
 - Alternative format: .tif (HALO)
 
-   - Use this when phenotyping was performed in HALO and unmixing was handled by inForm. The quality of the image (at the mirrored cursor visualization step) will be reduced.
+   - Use this when phenotyping was performed in HALO and unmixing was handled by inForm. The fine-tunning step will be suboptimal, as the image quality (for the mirrored cursor visualization) will be drastically reduced due to closed indica .tif format. Additionally, image loading time may take longer (bigger files than .qptiff for the same image size).
 
 <u>2. Annotation Files</u>
 
