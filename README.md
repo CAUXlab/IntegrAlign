@@ -60,21 +60,21 @@ Use this when phenotyping was performed in HALO and unmixing was handled by inFo
 
 2. Annotation Files
 
-Supported formats: .annotations or .geojson
+- Supported formats: .annotations or .geojson
 
-Important: To avoid mismatches, ensure annotation names are consistent across patients or use the --names argument to provide all possible names for each categorie.
+- Important: To avoid mismatches, ensure annotation names are consistent across patients or use the --names argument to provide all possible names for each categorie.
 
-Coordinate Tables
+3. Coordinate Tables
 
-Format: .csv
+- Format: .csv
 
-Requirements:
+- Requirements:
 
-- For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
+For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
 
-- For inForm outputs: must include x and y columns (coordinates in microns).
+For inForm outputs: must include x and y columns (coordinates in microns).
 
-Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables with :
+- Important: Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables with :
 HALO : XMin, XMax, YMin, YMax, cell_id, cell_type (from lineage markers), and phenotype (all positive marker in order to have the functional information).
 Inform : x (in µm), y (in µm) , cell_id, cell_type, and phenotype.
 
