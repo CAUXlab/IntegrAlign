@@ -54,9 +54,9 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
    - Use this format when
 
-      - .phenotyping has been performed in inForm,
+      - phenotyping has been performed in inForm,
 
-      - .or when phenotyping has been performed in HALO and unmixing was done directly using the Vectra Polaris scanner.
+      - or when phenotyping has been performed in HALO and unmixing was done directly using the Vectra Polaris scanner.
 
 - Alternative format: .tif (HALO)
 
