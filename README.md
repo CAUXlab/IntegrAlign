@@ -70,9 +70,9 @@ Use this when phenotyping was performed in HALO and unmixing was handled by inFo
 
 - Requirements:
 
-For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
+   - For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
 
-For inForm outputs: must include x and y columns (coordinates in microns).
+   - For inForm outputs: must include x and y columns (coordinates in microns).
 
 - Important: Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables with :
 HALO : XMin, XMax, YMin, YMax, cell_id, cell_type (from lineage markers), and phenotype (all positive marker in order to have the functional information).
