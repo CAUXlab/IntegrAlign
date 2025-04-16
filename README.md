@@ -44,6 +44,40 @@ pip install .
 
 ## Quick start
 
+### 0 Inputs
+
+IntegrAlign requires three main types of files to align multi-IF slides:
+
+1. Scan Images
+
+- Recommended format: .qptiff
+Use this format when
+.phenotyping has been performed in inForm,
+.or when phenotyping has been performed in HALO and unmixing was done directly using the Vectra Polaris scanner.
+
+- Alternative format: .tif (HALO)
+Use this when phenotyping was performed in HALO and unmixing was handled by inForm.
+
+2. Annotation Files
+
+Supported formats: .annotations or .geojson
+
+Important: To avoid mismatches, ensure annotation names are consistent across patients or use the --names argument to provide all possible names for each categorie.
+
+Coordinate Tables
+
+Format: .csv
+
+Requirements:
+
+- For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
+
+- For inForm outputs: must include x and y columns (coordinates in microns).
+
+Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables with :
+HALO : XMin, XMax, YMin, YMax, cell_id, cell_type (from lineage markers), and phenotype (all positive marker in order to have the functional information).
+Inform : x (in µm), y (in µm) , cell_id, cell_type, and phenotype.
+
 ### 1 Visualization
 
 Once you have activated your virtual environment and installed the necessary dependencies, you can run the first step of the tool by using:
@@ -154,6 +188,14 @@ python main_IntegrAlign.py finetuning --id 02005 --meshsize 6 8 --dwnscimg "outp
 --alpha - Transparency of the reference panel in red for visualization of the alignment (optional). Value by default : 0.4
 
 Notes : The given parameters have to be in the same panel order as in step 1 Visualization.
+
+### 5 Outputs
+
+You can keep track of the alignments using the Alignments_validated.xlsx file located in your output directory. This file is generated during the second step (Save downscaled images).
+
+In the Alignment/merged_tables/ directory, you will find the merged coordinate tables for each patient. These tables contain the concatenated data from all panels, with coordinates transformed accordingly to the reference panel (except for the reference slide, whose coordinates remain unchanged) and in µm. A "Panel" column is also added to indicate which cells belong to which panel. If you need unique cell IDs across panels, you can concatenate the cell ID column with the panel name (using an underscore for example).
+
+If the column names in the panel tables match, they will be merged. Any columns unique to specific panels will appear as NaN or empty cells in the resulting CSV for panels that don't include them.
 
 ## What is a good alignment?
 
