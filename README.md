@@ -48,7 +48,7 @@ pip install .
 
 IntegrAlign requires three main types of files to align multi-IF slides:
 
-1. Scan Images
+<u>1. Scan Images</u>
 
 - Recommended format: .qptiff
 Use this format when
@@ -58,13 +58,13 @@ Use this format when
 - Alternative format: .tif (HALO)
 Use this when phenotyping was performed in HALO and unmixing was handled by inForm.
 
-2. Annotation Files
+<u>2. Annotation Files</u>
 
 - Supported formats: .annotations or .geojson
 
 - Important: To avoid mismatches, ensure annotation names are consistent across patients or use the --names argument to provide all possible names for each categorie.
 
-3. Coordinate Tables
+<u>3. Coordinate Tables</u>
 
 - Format: .csv
 
