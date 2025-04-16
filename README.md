@@ -49,10 +49,10 @@ pip install .
 Once you have activated your virtual environment and installed the necessary dependencies, you can run the first step of the tool by using:
 
 ```bash
-python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --namesAnnotationsEmpty Artefacts Manual_Artefacts Empty No_tissue --panels T DC TLS --output "output/"
+python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --namesEmpty Empty No_tissue --namesArtefacts Artefacts Manual_Artefacts --namesAnalysisArea Analysis_Area --panels T DC TLS --output "output/"
 ```
 
-This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help to determine which slides cannot be aligned and if some panels need to be rotated for best alignment.
+This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help identify which slides cannot be aligned, saving time when processing large patient cohorts.
 
 <ins>Options:</ins>
 
@@ -60,7 +60,11 @@ This steps will create a report file ```images_report.html``` that plots every p
 
 --annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Optional.
 
---namesAnnotationsEmpty - Names of the empty areas in the annotations files.
+--namesEmpty - Name(s) of the empty areas in the annotations files.
+
+--namesArtefacts - Name(s) of the Artefacts areas in the annotations files. 
+
+--namesAnalysisArea - Name(s) of the Analysis areas in the annotations files.
 
 --panels - Panel names.
 
@@ -70,7 +74,7 @@ Notes : **The order is crucial** for --scans, --annotations and --panels options
 
 ### 2 Save downscaled images
 
-This steps will preprocess the data (downscaling and rotation) and save the images without excluded patients. This will generate a file containing downscaled images, allowing for alignment processing without needing access to the ```.qptiff``` files. An excel file (```Alignments_validated.xlsx```) will also be generated to track the validation status of each registration after the alignment step completed.
+This step will preprocess the data by downscaling the paired images for alignment at the same compression level. Also you can appply cropping (slides with amygdales for control) and manual pre alignment (improve final results) and save the resulting images for the patients that have not been excluded. This will generate a file containing the downscaled images, allowing for alignment processing without needing access to the ```.qptiff``` files. An excel file (```Alignments_validated.xlsx```) will also be generated to track the validation status of each registration after the alignment step completed.
 
 ```bash
 python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 02006 06001 08006
@@ -82,14 +86,16 @@ python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 0200
 
 --exclude - Patient IDs to exclude from alignment.
 
+--brightness - Brightness factor for the cropping and manual alignment visualization (optional). Value by default : 1
+
 
 ### 3 Alignment
 
 This is the main step of this pipeline, here we align all downscaled images, generate an html report for each alignment and merged tables with cells' coordinates of each panel.
 
-Indeed this step run different alignment for different mesh size and then the optimal mesh size is chosen based on the correlation result between the rasters of the cells coordinates (all cells from DAPI staining). This way we avoid the use of a mesh size that would induce deformations within the tissue.
+This step run different alignment for different mesh size and then the optimal mesh size is chosen based on the correlation result between the rasters of the cells coordinates (all cells from DAPI staining). This way we avoid the use of a mesh size that would induce deformations within the tissue.
 
-This can be run in a cluster computing environment using the ```params.json```, ```downscaled_images.pkl``` and the coordinate tables files.
+This can be run in a cluster computing environment using the ```downscaled_images.pkl``` and the coordinates tables files.
 
 ```bash
 python main_IntegrAlign.py align --dwnscimg "output/downscaled_images.pkl" --tables "T/Cell_positions/" "DC/Cell_positions/" "TLS/Cell_positions/"
@@ -111,19 +117,18 @@ python main_IntegrAlign.py align --dwnscimg "output/downscaled_images.pkl" --tab
 
 --alpha - Transparency of the reference panel in red for visualization of the alignment (optional). Value by default : 0.4
 
-Notes : If there is no intersections found between the analysis areas of each panel, one of the alignment is considered suboptimal, then it will continue to the next patient without saving merged annotations, tables or plots.
-Also, the given parameters have to be in the same panel order as in step 1 Visualization.
+Notes : The given parameters have to be in the same panel order as in step 1 Visualization.
 
 ### 4 Fine tuning
 
-This step is used to refine the alignment(s) for a specific patient. For example, if you think the chosen mesh size is not optimal, if you want to change any parameter for better visualization (alpha, raster size) or if you need a more precise look over the alignment using mirrored cursor visualization.
+This step allows for detailed visualization and fine-tuning of the alignment(s) for a specific patient. For example, if you think the chosen mesh size is not optimal, if you want to change any parameter for better visualization (alpha, raster size) or if you need a more precise look over the alignment using mirrored cursor visualization.
 
-This will write, with the specified **mesh size** (resolution of the deformation), a "_refined" alignment report(s) and rewrite the merged coordinates tables and the merged annotations files. 
+This will write, with the specified **mesh size** (resolution of the deformation), a "_refined" alignment report(s) and rewrite the merged coordinates tables and the merged annotations files, if specified. 
 
-You can also, if needed, validate the alignment with the mirrored cursor visualization and manually clip areas where the alignment is inadequate. This step of validation **requires the paths to the .qptiff files** of the scans.
+You can also validate the alignment with the mirrored cursor visualization and manually clip areas where the alignment is inadequate. This step of validation **requires the paths to the .qptiff files** of the scans.
 
 ```bash
-python main_IntegrAlign.py finetuning --id 02005 --meshsize 6 8 --dwnscimg "output/downscaled_images.pkl" --tables "T/Cell_positions/" "DC/Cell_positions/" "TLS/Cell_positions/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --visualization all --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/"
+python main_IntegrAlign.py finetuning --id 02005 --meshsize 6 8 --dwnscimg "output/downscaled_images.pkl" --tables "T/Cell_positions/" "DC/Cell_positions/" "TLS/Cell_positions/" --visualization all --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/"
 ```
 
 <ins>Options:</ins>
@@ -135,8 +140,6 @@ python main_IntegrAlign.py finetuning --id 02005 --meshsize 6 8 --dwnscimg "outp
 --dwnscimg - Paths to the downscaled images file (.pkl).
 
 --tables - Paths to 2 or 3 panel folders of the coordinate tables (.csv). Keep the same order used in the visualize step.
-
---annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.
 
 --visualization - Enable mirrored cursor visualization for manual quality control (QC) of alignments, folder paths to the scans is required. Options: '0' (no visualization, default), '1' (visualize the first alignment), '2' (visualize the second alignment), 'all' (visualize all alignments).
 
