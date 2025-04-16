@@ -72,7 +72,7 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
 - Format: .csv
 
-- Requirements:
+- Requirements: The coordinates must be in the same coordinate system as the corresponding image. If any rotation or translation has been applied (e.g., in HALO), the coordinates may no longer match the image directly. As a result, the transformation will be applied on false coordinates resulting in errors in the final table.
 
    - For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
 
