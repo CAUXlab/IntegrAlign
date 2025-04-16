@@ -32,11 +32,15 @@ from src.alignment import save_tables, plot_rasters
 
 
 
-def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotations_tables, visualization, scans_path, resolution_micron, metric, pixel_size_raster_micron, alpha_red):
+def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualization, scans_path, resolution_micron, metric, pixel_size_raster_micron, alpha_red):
     ## Load and read the pickle file
     with open(downscaled_images_path, "rb") as file:
         downscaled_images = pickle.load(file)
     ## Get the parameters
+    annotations_paths = downscaled_images["params"].get("annotations_paths")
+    annotations_names_AnalysisArea = downscaled_images["params"].get("annotations_names_AnalysisArea")
+    annotations_names_empty = downscaled_images["params"].get("annotations_names_empty")
+    annotations_names_artefacts = downscaled_images["params"].get("annotations_names_artefacts")
     panels_all = downscaled_images["params"].get("panels")
     output_path = downscaled_images["params"].get("output_path")
     ## Remove "params" from downscaled_images
@@ -83,7 +87,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotati
             # Get the panel path
             index = panels_all.index(panel)
             coordinate_table = coordinate_tables[index]
-            annotations = annotations_tables[index]
+            annotations = annotations_paths[index]
             # Get the file path corresponding to id
             csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
             # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
@@ -94,7 +98,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, annotati
             )
             ## Get the coordinates table and annotations
             cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
-            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
         ## Create the alignment report
         print("Creating the alignment report...")
         outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment = alignment_report(id, name_alignment, panels_alignment, cell_coordinates, metadata_images, output_path, 

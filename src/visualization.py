@@ -18,7 +18,7 @@ from collections import Counter
 
 from src.alignment import get_annotations, get_gdf
 
-def visualization(scans_paths, annotations, panels, output_path):
+def visualization(scans_paths, annotations, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea, panels, output_path):
     """Generate a visualization report of all the slides for each patients."""
     ## Get the ids of every patients
     ids_panels = []
@@ -36,12 +36,14 @@ def visualization(scans_paths, annotations, panels, output_path):
     ## Save the report with the compressed images of every common ids
     figs = []
     for id in tqdm(sorted_common_ids, desc="Processing images", unit="ID"):
-        fig = plot_panels(scans_paths, annotations, id, panels)  # Generate figure
+        fig = plot_panels(scans_paths, annotations, id, panels, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)  # Generate figure
         figs.append(fig)
     save_html_report(figs, sorted_common_ids, output_path + "images_report.html")
 
     ## Save parameters for next steps
-    dict_params = {"scans_paths":scans_paths, "annotations_paths":annotations, "common_ids":sorted_common_ids, "panels":panels, "output_path":output_path}
+    dict_params = {"scans_paths":scans_paths, "annotations_paths":annotations, 
+                   "annotations_names_empty":annotations_names_empty, "annotations_names_artefacts":annotations_names_artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, 
+                   "common_ids":sorted_common_ids, "panels":panels, "output_path":output_path}
     params_json = json.dumps(dict_params,indent=4)
     with open(output_path + "params.json","w") as outfile:
         outfile.write(params_json)
@@ -62,7 +64,7 @@ def find_ids(folder_path):
     return ids
 
 
-def plot_panels(scans_paths, annotations_paths, id, panels):
+def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea):
     # print("------------------------")
     # print("Patient ", id)
     imgs_resized = []
@@ -88,7 +90,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels):
                 if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
                 None
             )
-            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
 
             analysis_area_gdf_poly = analysis_area_alignment[panel]
             analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, crop_coords = (0, 0), image_shape = img_resized.shape, img_resize = img_resized)

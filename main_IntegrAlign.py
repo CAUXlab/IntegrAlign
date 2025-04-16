@@ -36,17 +36,17 @@ if __name__ == "__main__":
 
     # Process the task
     if args.task == "visualize":
-        visualization(args.scans, args.annotations, args.panels, args.output)
+        visualization(args.scans, args.annotations, args.namesEmpty, args.namesArtefacts, args.namesAnalysisArea, args.panels, args.output)
 
     elif args.task == "saveimgs":
-        save_downscaled_images(args.params, args.exclude)
+        save_downscaled_images(args.params, args.exclude, args.brightness)
 
     elif args.task == "align":
-        alignment(args.dwnscimg, args.tables, args.annotations, args.resolution, args.maxMS, args.metric, args.raster, args.alpha)
+        alignment(args.dwnscimg, args.tables, args.resolution, args.maxMS, args.metric, args.raster, args.alpha)
 
     elif args.task == "finetuning":
         # Ensure scans is provided if visualization is specified
         if args.visualization != "0" and args.scans is None:
             raise ValueError("--scans is required when --visualization is set to a value other than '0'.")
 
-        finetuning(args.id, args.meshsize, args.dwnscimg, args.tables, args.annotations, args.visualization, args.scans, args.resolution, args.metric, args.raster, args.alpha)
+        finetuning(args.id, args.meshsize, args.dwnscimg, args.tables, args.visualization, args.scans, args.resolution, args.metric, args.raster, args.alpha)

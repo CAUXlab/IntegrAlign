@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 class ImageCropperApp:
-    def __init__(self, root, img1, img2, panels, annotations_resized):
+    def __init__(self, root, img1, img2, panels, annotations_resized, brightness_factor):
         self.root = root
         self.root.title("Image Cropper")
 
@@ -23,7 +23,6 @@ class ImageCropperApp:
 
         ## Increase brightness manually before displaying 
         # To compensate the grayscale to RGB conversion for tkinter
-        brightness_factor = 5
         self.img1 = self.adjust_brightness(self.img1, brightness_factor)
         self.img2 = self.adjust_brightness(self.img2, brightness_factor)
 

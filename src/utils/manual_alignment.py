@@ -6,7 +6,7 @@ from scipy.ndimage import rotate, shift
 import gc
 
 class ImageManualAlignmentApp:
-    def __init__(self, master, img1_8bit, img2_8bit):
+    def __init__(self, master, img1_8bit, img2_8bit, brightness_factor):
         self.master = master
         self.master.title("Image Alignment Tool")
 
@@ -16,7 +16,6 @@ class ImageManualAlignmentApp:
 
         ## Increase brightness manually before displaying 
         # To compensate the grayscale to RGB conversion for tkinter
-        brightness_factor = 5
         self.img1_original = self.adjust_brightness(self.img1_original, brightness_factor)
         self.img2_original = self.adjust_brightness(self.img2_original, brightness_factor)
 
@@ -129,20 +128,44 @@ class ImageManualAlignmentApp:
         self.canvas.itemconfig(self.img1_canvas, image=self.img1_tk)
         
     def update_rotation(self, event=None):
-        """Rotate img1 while keeping the current alpha value."""
+        """Rotate img1 with expand=True and keep it centered properly."""
         self.angle = self.rotation_slider.get()
 
-        # Rotate without expanding size
-        rotated = self.img1_display.rotate(self.angle, resample=Image.Resampling.BICUBIC)
+        # Get current center position of the original image (before rotation)
+        orig_center_x = self.img1_display.width // 2
+        orig_center_y = self.img1_display.height // 2
 
-        # Preserve current alpha blending
+        # Rotate with expand=True
+        rotated = self.img1_display.rotate(self.angle, resample=Image.Resampling.BICUBIC, expand=True)
+
+        # Calculate offset to preserve center alignment
+        new_center_x = rotated.width // 2
+        new_center_y = rotated.height // 2
+
+        offset_x = orig_center_x - new_center_x
+        offset_y = orig_center_y - new_center_y
+
+        # Apply alpha blending
         alpha_layer = rotated.split()[3].point(lambda p: int(p * self.alpha))
         rotated.putalpha(alpha_layer)
 
-        # Store transformed image and update display
         self.img1_transformed = rotated
         self.img1_tk = ImageTk.PhotoImage(rotated)
+
+        # Update the canvas image
         self.canvas.itemconfig(self.img1_canvas, image=self.img1_tk)
+
+        # Apply offset to keep the center fixed + user's dragging offset
+        self.canvas.coords(
+            self.img1_canvas,
+            self.img1_x + offset_x,
+            self.img1_y + offset_y
+        )
+
+        # Store offsets in case you want to reference them later
+        self.rotation_offset_x = offset_x
+        self.rotation_offset_y = offset_y
+
 
     def start_drag(self, event):
         self.dragging = True

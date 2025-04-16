@@ -12,6 +12,12 @@ def parse_arguments():
                                     help="Paths to 2 or 3 panel folders of the scans (.qptiff). Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels.")
     preprocess_parser.add_argument('--annotations', nargs='+', default=None,
                                     help="Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.")
+    preprocess_parser.add_argument('--namesEmpty', nargs='+', default=None,
+                                   help="Name(s) of the empty areas in the annotations files. Example: Empty No_tissue")
+    preprocess_parser.add_argument('--namesArtefacts', nargs='+', default=None,
+                                   help="Name(s) of the Artefacts areas in the annotations files. Example: Artefacts Manual_Artefacts")
+    preprocess_parser.add_argument('--namesAnalysisArea', nargs='+', default=None,
+                                   help="Name(s) of the Analysis areas in the annotations files. Example: Analysis_area")
     preprocess_parser.add_argument('--panels', nargs='+', required=True,
                                     help="List of the panel names. Keep the same order as folders.")
     preprocess_parser.add_argument('--output', required=True, help="Path to save the preprocessing report")
@@ -22,6 +28,8 @@ def parse_arguments():
                                    help="Paths to the params file")
     saveimgs_parser.add_argument('--exclude', type=str, nargs='+', default=[],
                                    help="List of patient IDs to exclude from alignment")
+    saveimgs_parser.add_argument('--brightness', type=float, default=1, 
+                                   help="Brightness factor for the cropping and manual alignment visu (optional). Value by default : 1")
                                    
     # Alignment Task
     alignment_parser = subparsers.add_parser("align", help="Align panels, generate QC report and a table with combined cell types")
@@ -29,8 +37,6 @@ def parse_arguments():
                                    help="Paths to the downscaled images file (.pkl)")
     alignment_parser.add_argument('--tables', nargs='+', required=True,
                                    help="Paths to 2 or 3 panel folders of the coordinate tables (.csv). Keep the same order used in the visualize step.")
-    alignment_parser.add_argument('--annotations', nargs='+', required=True,
-                                   help="Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.")
     alignment_parser.add_argument('--resolution', type=float, default=2.012948251135, 
                                    help="Resolution in µm (optional). Value by default : 2.012948251135")
     alignment_parser.add_argument('--maxMS', type=int, default=10, 
@@ -41,6 +47,7 @@ def parse_arguments():
                                    help="Pixel size of the raster in micron (optional). Value by default : 30µm")
     alignment_parser.add_argument('--alpha', type=int, default=0.4, 
                                    help="Transparency of the reference panel in red for visualization of the alignment (optional). Value by default : 0.4")
+    
 
     # finetuning Task
     finetuning_parser = subparsers.add_parser("finetuning", help="Validate the data for a specific patient")
@@ -51,8 +58,6 @@ def parse_arguments():
                                     help="Paths to the downscaled images file (.pkl)")
     finetuning_parser.add_argument('--tables', nargs='+', required=True,
                                     help="Paths to 2 or 3 panel folders of the coordinate tables (.csv). Keep the same order used in the visualize step.")
-    finetuning_parser.add_argument('--annotations', nargs='+', required=True,
-                                    help="Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.")
     finetuning_parser.add_argument('--visualization', type=str, choices=["0", "1", "2", "all"], default="0",
                                     help=("Enable mirrored cursor visualization for manual quality control (QC) of alignments. "
                                         "Options: '0' (no visualization, default), '1' (visualize the first alignment), "

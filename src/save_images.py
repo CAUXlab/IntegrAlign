@@ -29,9 +29,9 @@ import os
 import fnmatch
 
 
-def save_downscaled_images(params_file_path, excluded_ids):
+def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
     ## Get the parameters for alignment
-    scans_paths, annotations_paths, common_ids, panels_all, output_path = get_parameters(params_file_path, excluded_ids)
+    scans_paths, annotations_paths, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea, common_ids, panels_all, output_path = get_parameters(params_file_path, excluded_ids)
     ## Get the name of the panels for each alignment (with reference panel at the end)
     data_dict = {}
     panel_alignment_dict = panels_name_alignment(panels_all, scans_paths)
@@ -64,7 +64,7 @@ def save_downscaled_images(params_file_path, excluded_ids):
                     None
                 )
                 ## Get the annotations
-                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
                 analysis_area_gdf_poly = analysis_area_alignment[panel]
                 if index == 0:
                     analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, image_shape = img1_resize.shape, img_resize = img1_resize)
@@ -73,9 +73,9 @@ def save_downscaled_images(params_file_path, excluded_ids):
                     analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent2, image_shape = img2_resize.shape, img_resize = img2_resize)
                     annotations_resized.append(analysis_area_polygons)
                 
-
+            ## Cropping step
             root = tk.Tk()
-            app = ImageCropperApp(root, img1_resize, img2_resize, panels, annotations_resized)
+            app = ImageCropperApp(root, img1_resize, img2_resize, panels, annotations_resized, brightness_factor)
             root.mainloop()
             if app.saved:
                 cropped_images_dict = app.cropped_images
@@ -99,8 +99,9 @@ def save_downscaled_images(params_file_path, excluded_ids):
                 crop_coords1 = (0, 0)
                 crop_coords2 = (0, 0)
 
+            ## Manual alignment step
             root = tk.Tk()
-            app = ImageManualAlignmentApp(root, img1_resize, img2_resize)
+            app = ImageManualAlignmentApp(root, img1_resize, img2_resize, brightness_factor)
             root.mainloop()
             
             if hasattr(app, 'manually_aligned_image1'):
@@ -167,7 +168,7 @@ def save_downscaled_images(params_file_path, excluded_ids):
                 "img2_shape_ori": img2_resize_ori.shape,
             }
     # Add params
-    data_dict["params"] = {"common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path}
+    data_dict["params"] = {"annotations_paths":annotations_paths, "annotations_names_empty":annotations_names_empty, "annotations_names_artefacts":annotations_names_artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, "common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path}
     # Save the dictionary to a file
     with open(output_path + "downscaled_images.pkl", "wb") as file:
         pickle.dump(data_dict, file)
@@ -266,6 +267,9 @@ def get_parameters(params_file_path, excluded_ids):
         params_dict = json.load(infile)
     scans_paths = params_dict.get("scans_paths")
     annotations_paths = params_dict.get("annotations_paths")
+    annotations_names_AnalysisArea = params_dict.get("annotations_names_AnalysisArea")
+    annotations_names_empty = params_dict.get("annotations_names_empty")
+    annotations_names_artefacts = params_dict.get("annotations_names_artefacts")
     common_ids = params_dict.get("common_ids")
     panels = params_dict.get("panels")
     output_path = params_dict.get("output_path")
@@ -273,7 +277,7 @@ def get_parameters(params_file_path, excluded_ids):
     ## Exclude specific ids
     common_ids = [id for id in common_ids if id not in excluded_ids]
     
-    return scans_paths, annotations_paths, common_ids, panels, output_path
+    return scans_paths, annotations_paths, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea, common_ids, panels, output_path
 
 def panels_name_alignment(panels, folder_paths):
     ''' Get the name of the panels and corresponding folder for each alignment. '''
@@ -405,7 +409,8 @@ def get_data_alignment_tif(path_scan):
     xml = tiffcomment(path_scan)
     root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
     # Get the size of the full image resolution this way because "sizeX" don't give the same sizes
-    sizeX_fullres = tif.series[0].levels[0].asarray()[0].shape[0]
+    # and tif.series[0].levels[0].asarray()[0].shape[0] is taking too long to compute
+    sizeX_fullres = tif.pages[0].asarray().shape[0]
     sizeX_compressed = img_resize.shape[0]
     # sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
     channels = [

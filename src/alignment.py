@@ -24,12 +24,16 @@ import shapely.vectorized
 import matplotlib.colors as mcolors
 
 
-def alignment(downscaled_images_path, coordinate_tables, annotations_tables, resolution_micron, number_ms, metric, pixel_size_raster_micron, alpha_red):
+def alignment(downscaled_images_path, coordinate_tables, resolution_micron, number_ms, metric, pixel_size_raster_micron, alpha_red):
     ## Load and read the pickle file
     with open(downscaled_images_path, "rb") as file:
         downscaled_images = pickle.load(file)
 
     ## Get the parameters
+    annotations_paths = downscaled_images["params"].get("annotations_paths")
+    annotations_names_AnalysisArea = downscaled_images["params"].get("annotations_names_AnalysisArea")
+    annotations_names_empty = downscaled_images["params"].get("annotations_names_empty")
+    annotations_names_artefacts = downscaled_images["params"].get("annotations_names_artefacts")
     common_ids = downscaled_images["params"].get("common_ids")
     panels_all = downscaled_images["params"].get("panels")
     # print(panels_all)
@@ -85,7 +89,7 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
                 # Get the panel path
                 index = panels_all.index(panel)
                 coordinate_table = coordinate_tables[index]
-                annotations = annotations_tables[index]
+                annotations = annotations_paths[index]
                 # Get the file path corresponding to id
                 csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
                 # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
@@ -96,7 +100,7 @@ def alignment(downscaled_images_path, coordinate_tables, annotations_tables, res
                 )
                 ## Get the coordinates table and annotations
                 cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
-                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment)
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
             ## Create the alignment report
             print("Creating the alignment report...")
             outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment = alignment_report(id, name_alignment, panels_alignment, cell_coordinates, metadata_images, output_path, 
@@ -454,58 +458,60 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates,
     return cell_coordinates, data_frame_cells
 
 
-def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment):
+def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_Empty, annotations_names_Artefacts, annotations_names_AnalysisArea):
     if annotation_file_path.endswith(".annotations"):
         # Parse the XML file
         tree = ET.parse(annotation_file_path)
         root = tree.getroot()
 
-
-        # Define classification categories and convert them to lowercase (case-insensitive)
-        annotations_classification = ['Analysis_area']
-        # Filter analysis area
-        gdf = get_gdf_from_annot(root, annotations_classification)
-        # analysis_area_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
-        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
-        if analysis_area_gdf["geometry"].is_empty.all():
-            analysis_area = False
+        if annotations_names_AnalysisArea:
+            # Filter analysis area
+            gdf = get_gdf_from_annot(root)
+            analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_AnalysisArea))]
+            if analysis_area_gdf["geometry"].is_empty.all():
+                print(f"No annotations named {annotations_names_AnalysisArea}")
+            else:
+                analysis_area_alignment[panel] = analysis_area_gdf["geometry"]
+                if annotations_names_Empty or annotations_names_Artefacts:
+                    annotations_names_Empty_Artefacts = annotations_names_Empty + annotations_names_Artefacts
+                    gdf = get_gdf_from_annot(root)
+                    artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_Empty_Artefacts))]
+                    if artefacts_empty_gdf["geometry"].is_empty.all():
+                        print(f"No annotations named {annotations_names_Empty_Artefacts}")
+                    else:
+                        artefacts_empty_alignment[panel] = artefacts_empty_gdf["geometry"]
         else:
-            analysis_area_alignment[panel] = analysis_area_gdf["geometry"]
-            analysis_area = True
+            if annotations_names_Empty:
+                ## Get the Empty areas
+                gdf = get_gdf_from_annot(root, NegativeROA = 0)
+                empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_Empty))]
+                # Find the index of the largest shape
+                largest_geometry_index = empty_gdf["geometry"].area.idxmax()
+                '''
+                # Get the largest shape
+                largest_geometry_gdf = artefacts_empty_gdf.loc[[largest_geometry_index]]
+                analysis_area_alignment[panel] = largest_geometry_gdf["geometry"]
+                '''
+                # Remove the largest geometry (full slide annotation) from the empty shapes
+                artefacts_empty_alignment[panel] = empty_gdf.drop(largest_geometry_index)["geometry"]
 
+                ## Get the Analysis area (here = Negative to empty areas)
+                gdf = get_gdf_from_annot(root, NegativeROA = 1)
+                analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_Empty))]
+                analysis_area_alignment[panel] = analysis_area_gdf["geometry"]
+            else:
+                print(f"No annotations named {annotations_names_Empty}")
+            if annotations_names_Artefacts:
+                ## Get the Artefacts areas
+                gdf = get_gdf_from_annot(root)
+                artefacts_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_Artefacts))]
+                artefacts_empty_alignment[panel] = pd.concat([
+                    artefacts_empty_alignment[panel],
+                    artefacts_gdf["geometry"]
+                ])
+            else:
+                print(f"No annotations named {annotations_names_Empty}")
 
-
-        # Define classification categories and convert them to lowercase (case-insensitive)
-        annotations_classification = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue', 'Vide']
-        # , 'Artefact', 'Arteract'
-        # 
-        if analysis_area:
-            # Filter artefacts, manual artefacts, empty, and no tissue
-            gdf = get_gdf_from_annot(root, annotations_classification)
-            # artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
-            artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
-            artefacts_empty_alignment[panel] = artefacts_empty_gdf["geometry"]
-        else:
-            # Filter artefacts, manual artefacts, empty, and no tissue
-            gdf = get_gdf_from_annot(root, annotations_classification, NegativeROA = 0)
-            # artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
-            artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
-    
-            # Find the index of the largest shape
-            largest_geometry_index = artefacts_empty_gdf["geometry"].area.idxmax()
-            '''
-            # Get the largest shape
-            largest_geometry_gdf = artefacts_empty_gdf.loc[[largest_geometry_index]]
-            analysis_area_alignment[panel] = largest_geometry_gdf["geometry"]
-            '''
-            # Remove the largest geometry (analysis area) from the artefacts, empty shapes
-            artefacts_empty_alignment[panel] = artefacts_empty_gdf.drop(largest_geometry_index)["geometry"]
-
-            # Filter artefacts, manual artefacts, empty, and no tissue
-            gdf = get_gdf_from_annot(root, annotations_classification, NegativeROA = 1)
-            # artefacts_empty_gdf = gdf[gdf["classification"].str.lower().isin(annotations_classification)]
-            artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_classification))]
-            analysis_area_alignment[panel] = artefacts_empty_gdf["geometry"]
 
 
 
@@ -541,9 +547,9 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
         '''
 
         ## Check for the annotation types (non-case sensitive)
-        Annotations_classification = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']
-        # artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in Annotations_classification])]
-        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in Annotations_classification))]
+        # annotations_empty = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']
+        # artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in annotations_empty])]
+        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in annotations_empty))]
 
         # print(artefacts_empty_gdf['classification'].apply(lambda x: x.get('name')).unique())
         ## Convert LineString to Polygon
@@ -573,7 +579,7 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
 
     return artefacts_empty_alignment, analysis_area_alignment
 
-def get_gdf_from_annot(root, annotations_classification, NegativeROA = "all"):
+def get_gdf_from_annot(root, NegativeROA = "all"):
     # List to store annotation polygons
     geometries = []
     classification_labels = []
