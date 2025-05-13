@@ -199,9 +199,20 @@ class ImageManualAlignmentApp:
         self.trans_x /= self.scale_factor
         self.trans_y /= self.scale_factor
 
+        # Original shape
+        self.orig_shape = self.img1_8bit.shape
+        orig_center = np.array([self.orig_shape[0] / 2, self.orig_shape[1] / 2])
+
         # Apply rotation and translation to the original img1_8bit array (grayscale image)
         # Rotate the original img1_8bit (grayscale)
-        rotated_img1 = rotate(self.img1_8bit, self.angle, reshape=False)
+        rotated_img1 = rotate(self.img1_8bit, self.angle, reshape=True)
+        new_shape = rotated_img1.shape
+        new_center = np.array([new_shape[0] / 2, new_shape[1] / 2])
+        # Shift coordinates to new center
+        self.offset = new_center - orig_center
+
+        # Apply offset from rotation with TRUE reshape
+        rotated_img1 = shift(rotated_img1, shift=(0, *self.offset) if rotated_img1.ndim == 3 else -self.offset, order=1)
 
         # Apply translation (displacement) to the rotated image (this will shift the image)
         self.manually_aligned_image1 = shift(rotated_img1, (self.trans_y, self.trans_x), mode='nearest')

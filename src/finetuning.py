@@ -13,11 +13,15 @@ import warnings
 import SimpleITK as sitk # type: ignore
 from tifffile import TiffFile # type: ignore
 from tifffile.tiffcomment import tiffcomment
+import typing as tp
+from pathlib import Path
+import zlib
 from xml.etree import ElementTree
 import napari # type: ignore
 import vispy.color
 from shapely.geometry import mapping, Polygon
 from shapely.ops import unary_union
+from scipy.ndimage import rotate
 
 from src.alignment import remove_params, extract_downscaled_images
 from src.alignment import get_cells_coordinates_SPIAT_CellType, get_annotations
@@ -349,27 +353,44 @@ def load_QPTIFF_high_res(path_scan):
     channels = generate_channels_list(xml_content)
     # Load the second compressed image channels in .pages
     img_data = tif.series[0].levels[2].asarray()
-    sizeX_fullres2 = tif_tags['ImageLength']
-    sizeX_compressed2 = img_data[0].shape[0]
+    sizeY_fullres2 = tif_tags['ImageLength']
+    sizeY_compressed2 = img_data[0].shape[0]
 
-    return channels, img_data, sizeX_compressed2, sizeX_fullres2
+    return channels, img_data, sizeY_compressed2, sizeY_fullres2
 
 def load_TIF_high_res(path_scan):
     tif = TiffFile(path_scan, is_ome=False)
     xml = tiffcomment(path_scan)
     root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
-    sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
+    sizeY = list(dict.fromkeys([x.get("sizeY") for x in root.iter() if x.tag == "dimension"]))
     # Load the second compressed image channels in .levels
-    img_data = tif.series[0].levels[2].asarray()
-    print(img_data.shape)
-    sizeX_fullres = int(sizeX[0])
-    sizeX_compressed = int(sizeX[2])
+    img_data = tif.series[0].levels[-2].asarray()
+    sizeY_fullres = int(sizeY[0])
+    sizeY_compressed = int(sizeY[2])
     channels = [
         {"id": elem.get("id"), "name": elem.get("name"), "rgb": elem.get("rgb")}
         for elem in root.iter() if elem.tag == "channel"
     ]
-    return channels, img_data, sizeX_compressed, sizeX_fullres
 
+
+
+    return channels, img_data, sizeY_compressed, sizeY_fullres
+
+
+def get_channel_names_from_indica_xml(file: Path) -> list[str]:
+    """
+    Extract the name of channels in IndicaLabs TIFF file.
+
+    Parameters
+    ----------
+    file: pathlib.Path
+        Path to TIFF file.
+    """
+    xml = tiffcomment(file)
+    root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
+    # channels = [x.attrib for x in root.iter() if x.tag == 'channel']
+    channels = [x.get("name") for x in root.iter() if x.tag == "channel"]
+    return channels
 
 def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     # Define path of the qptiff or tiff
@@ -385,16 +406,17 @@ def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     if path1.endswith('.qptiff') and path2.endswith('.qptiff'):
         print(f"Loading .qptiff images...")
         ## Load images
-        channels1, img1_data, sizeX_compressed1, sizeX_fullres1 = load_QPTIFF_high_res(path1)
-        channels2, img2_data, sizeX_compressed2, sizeX_fullres2 = load_QPTIFF_high_res(path2)
+        channels1, img1_data, sizeY_compressed1, sizeY_fullres1 = load_QPTIFF_high_res(path1)
+        channels2, img2_data, sizeY_compressed2, sizeY_fullres2 = load_QPTIFF_high_res(path2)
 
     elif path1.endswith('.tif') and path2.endswith('.tif'):
         print(f"Loading .tif images...")
-        channels1, img1_data, sizeX_compressed1, sizeX_fullres1 = load_TIF_high_res(path1)
-        channels2, img2_data, sizeX_compressed2, sizeX_fullres2 = load_TIF_high_res(path2)
+        channels1, img1_data, sizeY_compressed1, sizeY_fullres1 = load_TIF_high_res(path1)
+        channels2, img2_data, sizeY_compressed2, sizeY_fullres2 = load_TIF_high_res(path2)
+        tif = True
 
-    scale_percent1 = sizeX_compressed1/sizeX_fullres1
-    scale_percent2 = sizeX_compressed2/sizeX_fullres2
+    scale_percent1 = sizeY_compressed1/sizeY_fullres1
+    scale_percent2 = sizeY_compressed2/sizeY_fullres2
 
     '''
     # Saving full resolution images
@@ -402,13 +424,13 @@ def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     np.save(dir_res + f"{id}/{folder_name_alignment}/results/img2_data_{id}_panel_{panels[0]}.npy", img2_data)
     '''
 
-    return img1_data, channels1, img2_data, channels2
+    return img1_data, channels1, img2_data, channels2, tif
 
 
 
 def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment = None, artefacts_empty_alignment = None, shapes_data_alignment=None, shapes_transformed=None, full_res=None):
     panels = name_alignment.split('_')
-    img1_data, channels1, img2_data, channels2 = load_high_res_imgs(scan_path1, scan_path2, id, panels)
+    img1_data, channels1, img2_data, channels2, tif = load_high_res_imgs(scan_path1, scan_path2, id, panels)
     scale_percent1 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[0]}"]
     scale_percent2 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[1]}"]
     crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
@@ -419,6 +441,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     scale_percent2_napari = image_shape2[0] / img2_data.shape[1]
     manual_alignment_displacement = metadata_images[name_alignment]['manual_alignment_displacement']
     manual_alignment_rotation = metadata_images[name_alignment]['manual_alignment_rotation']
+    manual_alignment_rotation_shape = metadata_images[name_alignment]['manual_alignment_rotation_shape']
     image_shape_manual_alignment = metadata_images[name_alignment]['image_shape_manual_alignment']
     print(f"Mirrored cursor visualization for alignment {name_alignment}")
     outTx_Rigid = outTx_Rigid_alignment[panels_alignment[0]]
@@ -447,19 +470,73 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
 
     viewer1 = napari.Viewer()
     viewer1.title = panels[0]
+
+    ## Rotate image in for better visualization of the alignment
+
+    def rotate_image_with_offset(img, angle):
+        """
+        Rotate a high-dimensional image (C, H, W) with expand=True and return the rotated image
+        and the offset needed to keep the original center fixed.
+
+        Parameters:
+            img (np.ndarray): Image of shape (C, H, W)
+            angle (float): Rotation angle in degrees
+
+        Returns:
+            rotated_img (np.ndarray): Rotated image with expand=True
+            offset (tuple): (offset_y, offset_x) to re-center image
+        """
+        channels, height, width = img.shape
+        img_shape = img.shape[1:]
+
+        # Rotate each channel separately with expand=True
+        rotated_channels = []
+        print('rotating image')
+        for c in range(channels):
+            rotated = rotate(img[c], angle, reshape=True, order=1)  # bilinear
+            rotated_channels.append(rotated)
+
+        # Stack back into shape (C, new_H, new_W)
+        rotated_img = np.stack(rotated_channels, axis=0)
+
+        # Original and new center
+        orig_center = np.array([height // 2, width // 2])
+        new_center = np.array([rotated_img.shape[1] // 2, rotated_img.shape[2] // 2])
+
+        # Calculate offset to re-align rotated image center with original center
+        offset = orig_center - new_center  # (dy, dx)
+
+        return rotated_img, img_shape, offset
+    
+    img1_data, img1_data_shape, img1_data_offset = rotate_image_with_offset(img1_data, manual_alignment_rotation)
+
+    #gamma_value = 0.3 if tif else 1.0
+
+    # Set contrast limits based on whether tif is True
+    contrast_limit = [0, 50] if tif else [0, 255]
+
     for i, channel in enumerate(channels1):
         rgb_values = int_to_rgb(channel['rgb'])
         colorMap = vispy.color.Colormap([[0.0, 0.0, 0.0], rgb_values])
+        
         if full_res:
-            rlayer = viewer1.add_image([img1_data[i],
-                                    img1_data[i][::4, ::4],
-                                    img1_data[i][::8, ::8]],
-                                    name=channel['name'], contrast_limits=[0, 255])
+            rlayer = viewer1.add_image(
+                [img1_data[i],
+                img1_data[i][::4, ::4],
+                img1_data[i][::8, ::8]],
+                name=channel['name'],
+                contrast_limits=contrast_limit
+            )
         else:
-            rlayer = viewer1.add_image(img1_data[i],
-                        name=channel['name'], contrast_limits=[0, 255])
+            rlayer = viewer1.add_image(
+                img1_data[i],
+                name=channel['name'],
+                contrast_limits=contrast_limit
+            )
+            
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap
+        #rlayer.gamma = gamma_value
         
     viewer2 = napari.Viewer()
     viewer2.title = panels[1]
@@ -470,12 +547,13 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             rlayer = viewer2.add_image([img2_data[i],
                                     img2_data[i][::4, ::4],
                                     img2_data[i][::8, ::8]],
-                                    name=channel['name'], contrast_limits=[0, 255])
+                                    name=channel['name'], contrast_limits=contrast_limit)
         else:
             rlayer = viewer2.add_image(img2_data[i],
-                        name=channel['name'], contrast_limits=[0, 255])
+                        name=channel['name'], contrast_limits=contrast_limit)
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap
+        #rlayer.gamma = gamma_value
     
     # Create a function to synchronize zooming and center between viewer1 and viewer2
     def sync_zoom_center(viewer_src, viewer_dest):
@@ -495,12 +573,21 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             points1_napari = event.position
             # Transform to the coordinate system of sitk
             points1_sitk = [points1_napari[1], points1_napari[0]]
+
+            ## Transform back the cursor to the coordinate system of the original img1_data (not rotated)
+            # Step 1: subtract offset (shift back from new center to old center)
+            points1_sitk += img1_data_offset[::-1]  # Reverse (dy, dx) → (dx, dy)
+            # Step 2: rotate in the opposite direction to undo rotation
+            points1_sitk = rotate_coordinates_angle(points1_sitk, manual_alignment_rotation, img1_data_shape)
+
             # Transform to the coordinate system of the resized image (the one used for the registration)
             scaled_points1 = tuple(value * scale_percent1_napari for value in points1_sitk)
             # Shift coords if cropping has been done on the first image
             scaled_points1 = shift_tuple_coordinates(scaled_points1, crop_coords1)
             # Shift and rotate coords based on pre-alignment
-            scaled_points1 = rotate_coordinates_angle(scaled_points1, -manual_alignment_rotation, image_shape_manual_alignment)
+            scaled_points1 = rotate_coordinates_angle(scaled_points1, -manual_alignment_rotation, manual_alignment_rotation_shape)
+            #scaled_points1 = shift_tuple_coordinates(scaled_points1, tuple(np.negative(manual_alignment_rotation_offset)))
+
             scaled_points1 = shift_tuple_coordinates(scaled_points1, tuple(np.negative(manual_alignment_displacement)))
             
             # Translate the cursor position to the corresponding point in img2_data
@@ -529,7 +616,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     # Create an empty layer for translated points in viewer2
     viewer2.add_points([], face_color='red', size=10, name='Translated Points')
 
-    def add_polygons_to_viewer(geometry_list, scale_percent, scale_percent_napari, viewer, edge_color, face_color, opacity, name):
+    def add_polygons_to_viewer(geometry_list, scale_percent, scale_percent_napari, viewer, viewer_id, edge_color, face_color, opacity, name):
         all_coords = []
         for single_polygon in geometry_list:
             if single_polygon.is_empty:
@@ -547,6 +634,31 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             for poly in polygons:
                 coords = (np.array(poly.exterior.coords) * scale_percent) / scale_percent_napari
                 coords = coords[:, [1, 0]]  # Invert x/y for Napari
+                if viewer_id == "viewer1":
+                    orig_center = np.array([img1_data_shape[0] / 2, img1_data_shape[1] / 2])  # (y, x)
+                    new_center = orig_center - np.array(img1_data_offset)  # undo how you computed the offset
+
+                    # Step 1: Translate to origin (center of original image)
+                    coords_centered = coords - orig_center
+
+                    # Step 2: Rotate around origin
+                    theta = np.deg2rad(manual_alignment_rotation)
+                    rot_matrix = np.array([
+                        [np.cos(theta), -np.sin(theta)],
+                        [np.sin(theta),  np.cos(theta)]
+                    ])
+                    rotated_coords = coords_centered @ rot_matrix.T
+
+                    # Step 3: Translate into rotated image space
+                    coords = rotated_coords + new_center
+
+
+
+                    
+
+
+
+
                 if coords.shape[0] > 2:
                     all_coords.append(coords)
 
@@ -562,31 +674,34 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
             )
 
     if analysis_area_alignment:
-        for geometry, scale_percent, scale_percent_napari, viewer in [
-            (analysis_area_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
-            (analysis_area_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
+        for geometry, scale_percent, scale_percent_napari, viewer, viewer_id in [
+            (analysis_area_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1, "viewer1"),
+            (analysis_area_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2, "viewer2"),
         ]:
             add_polygons_to_viewer(
                 geometry,
                 scale_percent,
                 scale_percent_napari,
                 viewer,
+                viewer_id,
                 edge_color='green',
                 face_color='gray',
                 opacity=0.3,
                 name="Analysis area"
             )
 
+
     if artefacts_empty_alignment:
-        for geometry, scale_percent, scale_percent_napari, viewer in [
-            (artefacts_empty_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
-            (artefacts_empty_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
+        for geometry, scale_percent, scale_percent_napari, viewer, viewer_id in [
+            (artefacts_empty_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1, "viewer1"),
+            (artefacts_empty_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2, "viewer2"),
         ]:
             add_polygons_to_viewer(
                 geometry,
                 scale_percent,
                 scale_percent_napari,
                 viewer,
+                viewer_id,
                 edge_color='transparent',
                 face_color='red',
                 opacity=0.5,
@@ -848,7 +963,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         ## Scale annotations to downscaled image resolution
         manual_empty_array = get_gdf(manual_empty_geometries, scale_percent1_napari, crop_coords1, image_shape1, img1_resize, c="B")
         # First scale with scale percent of the second downscaling (for napari visualization) and second scale with the scale percent of the full resolution image to get back to the resolution of the coordinates in pixel
-        manual_empty_alignment[f'{panels_alignment[0]}_in_{panels_alignment[1]}_panel'] = transform_annotation(manual_empty_array, scale_percent1_napari, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, image_shape_manual_alignment, outTx_Rigid, outTx_Bspline, img2_resize)
+        manual_empty_alignment[f'{panels_alignment[0]}_in_{panels_alignment[1]}_panel'] = transform_annotation(manual_empty_array, scale_percent1_napari, scale_percent2, image_shape1, image_shape2, crop_coords1, crop_coords2, manual_alignment_displacement, manual_alignment_rotation, manual_alignment_rotation_shape, outTx_Rigid, outTx_Bspline, img2_resize)
 
 
     return manual_empty_alignment

@@ -110,10 +110,14 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 img1 = sitk.GetImageFromArray(img1_resize)
                 img1 = sitk.Cast(img1, sitk.sitkFloat32)
                 # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
-                manual_alignment_rotation = app.angle
+                manual_alignment_rotation_angle = app.angle
+                manual_alignment_rotation_offset = app.offset
+                manual_alignment_rotation_shape = app.orig_shape
                 manual_alignment_displacement = (app.trans_x, app.trans_y)
             else:
-                manual_alignment_rotation = 0
+                manual_alignment_rotation_angle = 0
+                manual_alignment_rotation_offset = (0, 0)
+                manual_alignment_rotation_shape = (0, 0)
                 manual_alignment_displacement = (0, 0)
 
 
@@ -127,8 +131,8 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
             plt.title('Overlay of Blue and Red Images')
             plt.axis('off')
 
-            plt.tight_layout()
-            plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image.png', bbox_inches='tight')  # Save as PNG with tight bounding box
+            #plt.tight_layout()
+            plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image.png')  # Save as PNG with tight bounding box
             '''
 
 
@@ -161,7 +165,8 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 "crop_coords1": crop_coords1,
                 "crop_coords2": crop_coords2,
                 "manual_alignment_displacement": manual_alignment_displacement,
-                "manual_alignment_rotation": manual_alignment_rotation,
+                "manual_alignment_rotation_angle": manual_alignment_rotation_angle,
+                "manual_alignment_rotation_shape": manual_alignment_rotation_shape,
                 "img1_resize_ori": img1_resize_ori,
                 "img2_resize_ori": img2_resize_ori,
                 "img1_shape_ori": img1_resize_ori.shape,
@@ -305,17 +310,17 @@ def load_downscaled_imgs(folder_path1, folder_path2, id):
 
     if path1.endswith('.qptiff') and path2.endswith('.qptiff'):
         ## Load images
-        channels1, img1_resize, sizeX_compressed1, sizeX_fullres1 = get_data_alignment_qptiff(path1)
-        channels2, img2_resize, sizeX_compressed2, sizeX_fullres2 = get_data_alignment_qptiff(path2)
+        channels1, img1_resize, sizeY_compressed1, sizeY_fullres1 = get_data_alignment_qptiff(path1)
+        channels2, img2_resize, sizeY_compressed2, sizeY_fullres2 = get_data_alignment_qptiff(path2)
     
     elif path1.endswith('.tif') and path2.endswith('.tif'):
-        channels1, img1_resize, sizeX_compressed1, sizeX_fullres1 = get_data_alignment_tif(path1)
-        channels2, img2_resize, sizeX_compressed2, sizeX_fullres2 = get_data_alignment_tif(path2)
+        channels1, img1_resize, sizeY_compressed1, sizeY_fullres1 = get_data_alignment_tif(path1)
+        channels2, img2_resize, sizeY_compressed2, sizeY_fullres2 = get_data_alignment_tif(path2)
 
-    scale_percent1 = sizeX_compressed1/sizeX_fullres1
-    scale_percent2 = sizeX_compressed2/sizeX_fullres2
+    scale_percent1 = sizeY_compressed1/sizeY_fullres1
+    scale_percent2 = sizeY_compressed2/sizeY_fullres2
 
-    img1_resize, scale_percent1, img2_resize, scale_percent2 = get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, path2, img2_resize, scale_percent2, sizeX_fullres2)
+    img1_resize, scale_percent1, img2_resize, scale_percent2 = get_same_compression(id, path1, img1_resize, scale_percent1, sizeY_fullres1, path2, img2_resize, scale_percent2, sizeY_fullres2)
     
 
     # Scale images to 8bit
@@ -347,10 +352,10 @@ def get_data_alignment_qptiff(path_scan):
     channels = generate_channels_list(xml_content)
     # Load the most compressed DAPI image in .pages
     img_resize = tif.series[0].levels[-1].asarray()[0]
-    sizeX_fullres = tif_tags['ImageLength']
-    sizeX_compressed = img_resize.shape[0]
+    sizeY_fullres = tif_tags['ImageLength']
+    sizeY_compressed = img_resize.shape[0]
 
-    return channels, img_resize, sizeX_compressed, sizeX_fullres
+    return channels, img_resize, sizeY_compressed, sizeY_fullres
 
 def extract_json_from_xml(xml_content):
     """Extracts JSON content from an XML element that contains it as text."""
@@ -408,18 +413,21 @@ def get_data_alignment_tif(path_scan):
     img_resize = tif.series[0].levels[-1].asarray()[0]
     xml = tiffcomment(path_scan)
     root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
-    # Get the size of the full image resolution this way because "sizeX" don't give the same sizes
-    # and tif.series[0].levels[0].asarray()[0].shape[0] is taking too long to compute
-    sizeX_fullres = tif.pages[0].asarray().shape[0]
-    sizeX_compressed = img_resize.shape[0]
-    # sizeX = list(dict.fromkeys([x.get("sizeX") for x in root.iter() if x.tag == "dimension"]))
+    ## Get the size of the full resolution image
+    # Be carefull only the first value works for full res images, other don't match the downscale images sizes
+    sizeY_fullres = int(list(dict.fromkeys([x.get("sizeY") for x in root.iter() if x.tag == "dimension"]))[0])
+    # Get the size of the full image resolution this way if "sizeY" don't give the same sizes
+    # and tif.series[0].levels[0].asarray()[0].shape[0] takes too long to compute
+    #sizeY_fullres = tif.pages[0].asarray().shape[0]
+    sizeY_compressed = img_resize.shape[0]
+    # sizeY = list(dict.fromkeys([x.get("sizeY") for x in root.iter() if x.tag == "dimension"]))
     channels = [
         {"id": elem.get("id"), "name": elem.get("name"), "rgb": elem.get("rgb")}
         for elem in root.iter() if elem.tag == "channel"
     ]
-    return channels, img_resize, sizeX_compressed, sizeX_fullres
+    return channels, img_resize, sizeY_compressed, sizeY_fullres
 
-def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, path2, img2_resize, scale_percent2, sizeX_fullres2):
+def get_same_compression(id, path1, img1_resize, scale_percent1, sizeY_fullres1, path2, img2_resize, scale_percent2, sizeY_fullres2):
     # print("Compression")
     comp_lvl1 = round((1/scale_percent1))
     comp_lvl2 = round((1/scale_percent2))
@@ -434,7 +442,7 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, pat
         while comp_lvl2 < comp_lvl1:
             index_comp-=1
             img1_resize = tif.series[0].levels[index_comp].asarray()[0]
-            scale_percent1 = img1_resize.shape[0] / sizeX_fullres1
+            scale_percent1 = img1_resize.shape[0] / sizeY_fullres1
             comp_lvl1 = round((1/scale_percent1))
             print("Finding the correct compression")
             print(f"img1: 1/{comp_lvl1}ème")
@@ -446,7 +454,7 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, pat
         while comp_lvl1 < comp_lvl2:
             index_comp-=1
             img2_resize = tif.series[0].levels[index_comp].asarray()[0]
-            scale_percent2 = img2_resize.shape[0] / sizeX_fullres2
+            scale_percent2 = img2_resize.shape[0] / sizeY_fullres2
             comp_lvl2 = round((1/scale_percent2))
             print("Finding the correct compression")
             print(f"img1: 1/{comp_lvl1}ème")
@@ -454,14 +462,14 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX_fullres1, pat
     
     return img1_resize, scale_percent1, img2_resize, scale_percent2
 '''
-def get_same_compression(path1, img1_resize, scale_percent1, sizeX1, path2, img2_resize, scale_percent2, sizeX2):
+def get_same_compression(path1, img1_resize, scale_percent1, sizeY1, path2, img2_resize, scale_percent2, sizeY2):
     # print("Compression")
     comp_lvl1 = round((1/scale_percent1))
     comp_lvl2 = round((1/scale_percent2))
     # print(f"img1: 1/{comp_lvl1}ème")
     # print(f"img2: 1/{comp_lvl2}ème")
-    print(sizeX1)
-    print(sizeX2)
+    print(sizeY1)
+    print(sizeY2)
     # Check if both images are the same size
     if comp_lvl2 < comp_lvl1:
         index_comp = -1
@@ -470,7 +478,7 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX1, path2, img2
         while comp_lvl2 < comp_lvl1:
             index_comp-=1
             img1_resize = tif.series[0].levels[index_comp].asarray()[0]
-            scale_percent1 = int(sizeX1[index_comp]) / int(sizeX1[0])
+            scale_percent1 = int(sizeY1[index_comp]) / int(sizeY1[0])
             comp_lvl1 = round((1/scale_percent1))
             print("Finding the correct compression")
             print(f"img1: 1/{comp_lvl1}ème")
@@ -482,7 +490,7 @@ def get_same_compression(path1, img1_resize, scale_percent1, sizeX1, path2, img2
         while comp_lvl1 < comp_lvl2:
             index_comp-=1
             img2_resize = tif.series[0].levels[index_comp].asarray()[0]
-            scale_percent2 = int(sizeX2[index_comp]) / int(sizeX2[0])
+            scale_percent2 = int(sizeY2[index_comp]) / int(sizeY2[0])
             comp_lvl2 = round((1/scale_percent2))
             print("Finding the correct compression")
             print(f"img1: 1/{comp_lvl1}ème")
