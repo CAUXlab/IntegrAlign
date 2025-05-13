@@ -74,9 +74,9 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
 - Requirements: The coordinates must be in the same coordinate system as the corresponding image. If any rotation or translation has been applied (e.g., in HALO), the coordinates may no longer match the image directly. As a result, the transformation will be applied on false coordinates resulting in errors in the final table.
 
-   - For HALO outputs: must include XMin, XMax, YMin, and YMax columns (pixel coordinates).
+   - Can include XMin, XMax, YMin, and YMax columns (pixel coordinates, e.g. HALO outputs).
 
-   - For inForm outputs: must include x and y columns (coordinates in microns).
+   - Or x and y columns (coordinates in microns, e.g. inForm outputs).
 
 - Important: Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables with :
 
