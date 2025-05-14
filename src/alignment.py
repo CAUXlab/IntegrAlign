@@ -77,6 +77,7 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
             panels_alignment = name_alignment.split("_")
             metadata_images, img1, img2, img1_resize, img2_resize = extract_downscaled_images(downscaled_images_id_name_alignment, panels_alignment, 
                                                                                               name_alignment, metadata_images, id)
+
             ## Alignment
             print(f"Alignment {name_alignment}...")
             spline_order = 3
@@ -187,7 +188,38 @@ def alignment_2panels(name_alignment, id, img1, img2, number_ms, metric, spline_
     global metric_values_list
     metric_values_list= []
     start_time = time.time()  # Record start time
+
+
+    simg1 = sitk.GetArrayFromImage(img1)
+    simg2 = sitk.GetArrayFromImage(img2)
+
+    # Plotting the blue image with alpha blending and then overlaying the red image
+    plt.figure(figsize=(10, 5))
+    # Plot the first image (blue) with alpha blending
+    plt.imshow(simg1, cmap='Blues', alpha=0.6)  # Adjust alpha for blending
+    # Plot the second image (red) on top of the blue image
+    plt.imshow(simg2, cmap='Reds', alpha=0.4)  # Red image on top with a different alpha for blending
+    plt.title('Overlay of Blue and Red Images')
+    plt.axis('off')
+
+    #plt.tight_layout()
+    plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image_img_before_rigid.png')  # Save as PNG with tight bounding box
+    
     cimg, simg1_Rigid, simg2_Rigid, outTx_Rigid = imageRegRigid(img1,img2)
+
+
+    # Plotting the blue image with alpha blending and then overlaying the red image
+    plt.figure(figsize=(10, 5))
+    # Plot the first image (blue) with alpha blending
+    plt.imshow(simg1_Rigid, cmap='Blues', alpha=0.6)  # Adjust alpha for blending
+    # Plot the second image (red) on top of the blue image
+    plt.imshow(simg2_Rigid, cmap='Reds', alpha=0.4)  # Red image on top with a different alpha for blending
+    plt.title('Overlay of Blue and Red Images')
+    plt.axis('off')
+
+    #plt.tight_layout()
+    plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image_img_after_rigid.png')  # Save as PNG with tight bounding box
+
     end_time = time.time()  # Record end time
     execution_time = end_time - start_time  # Calculate execution time
     # print(f"Execution time for Rigid: {execution_time} seconds")

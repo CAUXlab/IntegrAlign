@@ -544,13 +544,20 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         rgb_values = int_to_rgb(channel['rgb'])
         colorMap = vispy.color.Colormap([[0.0, 0.0, 0.0], rgb_values])
         if full_res:
-            rlayer = viewer2.add_image([img2_data[i],
-                                    img2_data[i][::4, ::4],
-                                    img2_data[i][::8, ::8]],
-                                    name=channel['name'], contrast_limits=contrast_limit)
+            rlayer = viewer2.add_image(
+                [img2_data[i],
+                img2_data[i][::4, ::4],
+                img2_data[i][::8, ::8]],
+                name=channel['name'], 
+                contrast_limits=contrast_limit
+            )
         else:
-            rlayer = viewer2.add_image(img2_data[i],
-                        name=channel['name'], contrast_limits=contrast_limit)
+            rlayer = viewer2.add_image(
+                img2_data[i],
+                name=channel['name'], 
+                contrast_limits=contrast_limit
+            )
+            
         rlayer.blending = 'additive'
         rlayer.colormap = colorMap
         #rlayer.gamma = gamma_value

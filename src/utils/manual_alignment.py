@@ -4,11 +4,14 @@ from tkinter import Button
 from PIL import Image, ImageTk, ImageEnhance
 from scipy.ndimage import rotate, shift
 import gc
+import matplotlib.pyplot as plt
 
 class ImageManualAlignmentApp:
-    def __init__(self, master, img1_8bit, img2_8bit, brightness_factor):
+    def __init__(self, master, img1_8bit, img2_8bit, panels, annotations_resized, brightness_factor):
         self.master = master
         self.master.title("Image Alignment Tool")
+
+        self.panels = panels
 
         # Store original images as grayscale
         self.img1_original = Image.fromarray(img1_8bit).convert("L")  # Keep as grayscale
@@ -32,6 +35,7 @@ class ImageManualAlignmentApp:
         # Resize both images using the same scale factor
         self.img1_display = self.resize_image(self.img1_original, self.scale_factor).convert("RGBA")
         self.img2_display = self.resize_image(self.img2_original, self.scale_factor).convert("RGBA")
+
 
 
         # Store the current transformed img1 (for rotation & alpha blending)
@@ -97,18 +101,21 @@ class ImageManualAlignmentApp:
         return enhancer.enhance(factor)  # Factor > 1 brightens, < 1 darkens
 
     def get_scale_factor(self, img1, img2):
-        """Compute a single scale factor for both images to fit inside the canvas."""
+        """Compute scale factor so that both images fit within the canvas, preserving aspect ratio."""
         w1, h1 = img1.size
         w2, h2 = img2.size
 
-        # Keep the same aspect ratio for both images
-        max_width = min(self.canvas_width, w1, w2)
-        max_height = min(self.canvas_height, h1, h2)
+        # Determine the max dimensions of either image
+        max_img_width = max(w1, w2)
+        max_img_height = max(h1, h2)
 
-        scale_factor_w = max_width / max(w1, w2)
-        scale_factor_h = max_height / max(h1, h2)
+        # Calculate scale factors for width and height to fit canvas
+        scale_w = self.canvas_width / max_img_width
+        scale_h = self.canvas_height / max_img_height
 
-        return min(scale_factor_w, scale_factor_h)  # Use the same scale factor for both axes
+        # Return the smaller of the two to ensure both images fit
+        return min(scale_w, scale_h)
+
 
     def resize_image(self, img, scale_factor):
         """Resize the image using a uniform scale factor (no distortion)."""
@@ -202,7 +209,12 @@ class ImageManualAlignmentApp:
         # Original shape
         self.orig_shape = self.img1_8bit.shape
         orig_center = np.array([self.orig_shape[0] / 2, self.orig_shape[1] / 2])
-
+        
+        plt.figure(figsize=(10, 5))
+        plt.imshow(self.img1_8bit, cmap='Blues')
+        plt.axis('off')
+        plt.savefig('/Users/leohermet/Downloads/blue_8bit.png') 
+        
         # Apply rotation and translation to the original img1_8bit array (grayscale image)
         # Rotate the original img1_8bit (grayscale)
         rotated_img1 = rotate(self.img1_8bit, self.angle, reshape=True)
@@ -212,10 +224,9 @@ class ImageManualAlignmentApp:
         self.offset = new_center - orig_center
 
         # Apply offset from rotation with TRUE reshape
-        rotated_img1 = shift(rotated_img1, shift=(0, *self.offset) if rotated_img1.ndim == 3 else -self.offset, order=1)
-
+        dy, dx = self.offset
         # Apply translation (displacement) to the rotated image (this will shift the image)
-        self.manually_aligned_image1 = shift(rotated_img1, (self.trans_y, self.trans_x), mode='nearest')
+        self.manually_aligned_image1 = shift(rotated_img1, (self.trans_y - dy, self.trans_x - dx), mode='nearest')
 
         # Save the transformation parameters (rotation and translation)
         self.transformation_params = {

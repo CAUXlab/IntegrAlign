@@ -37,6 +37,7 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
     panel_alignment_dict = panels_name_alignment(panels_all, scans_paths)
 
     unique_name_alignments = set()
+    root = tk.Tk()
     for id in tqdm(common_ids, desc="Loading downscaled images", unit="Patient"):
         data_dict[id] = {}  # Initialize sub-dictionary for this patient
         for name_alignment, scans_alignment_paths in panel_alignment_dict.items():
@@ -74,8 +75,7 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                     annotations_resized.append(analysis_area_polygons)
                 
             ## Cropping step
-            root = tk.Tk()
-            app = ImageCropperApp(root, img1_resize, img2_resize, panels, annotations_resized, brightness_factor)
+            app = ImageCropperApp(tk.Toplevel(root), img1_resize, img2_resize, panels, annotations_resized, brightness_factor)
             root.mainloop()
             if app.saved:
                 cropped_images_dict = app.cropped_images
@@ -100,9 +100,9 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 crop_coords2 = (0, 0)
 
             ## Manual alignment step
-            root = tk.Tk()
-            app = ImageManualAlignmentApp(root, img1_resize, img2_resize, brightness_factor)
+            app = ImageManualAlignmentApp(tk.Toplevel(root), img1_resize, img2_resize, panels, annotations_resized, brightness_factor)
             root.mainloop()
+            
             
             if hasattr(app, 'manually_aligned_image1'):
                 img1_resize = copy.deepcopy(app.manually_aligned_image1)
@@ -120,7 +120,6 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 manual_alignment_rotation_shape = (0, 0)
                 manual_alignment_displacement = (0, 0)
 
-
             '''
             # Plotting the blue image with alpha blending and then overlaying the red image
             plt.figure(figsize=(10, 5))
@@ -132,9 +131,8 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
             plt.axis('off')
 
             #plt.tight_layout()
-            plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image.png')  # Save as PNG with tight bounding box
+            plt.savefig('/Users/leohermet/Downloads/overlay_blue_red_image_test.png')  # Save as PNG with tight bounding box
             '''
-
 
             
             '''
@@ -172,6 +170,7 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 "img1_shape_ori": img1_resize_ori.shape,
                 "img2_shape_ori": img2_resize_ori.shape,
             }
+    root.destroy()
     # Add params
     data_dict["params"] = {"annotations_paths":annotations_paths, "annotations_names_empty":annotations_names_empty, "annotations_names_artefacts":annotations_names_artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, "common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path}
     # Save the dictionary to a file
