@@ -210,11 +210,6 @@ class ImageManualAlignmentApp:
         self.orig_shape = self.img1_8bit.shape
         orig_center = np.array([self.orig_shape[0] / 2, self.orig_shape[1] / 2])
         
-        plt.figure(figsize=(10, 5))
-        plt.imshow(self.img1_8bit, cmap='Blues')
-        plt.axis('off')
-        plt.savefig('/Users/leohermet/Downloads/blue_8bit.png') 
-        
         # Apply rotation and translation to the original img1_8bit array (grayscale image)
         # Rotate the original img1_8bit (grayscale)
         rotated_img1 = rotate(self.img1_8bit, self.angle, reshape=True)
