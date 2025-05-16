@@ -10,6 +10,7 @@ setup(
         'napari[all]',
         'tk',
         'opencv-python',
+        'openpyxl',
         'SimpleITK',
         'scikit-image',
         'matplotlib',
