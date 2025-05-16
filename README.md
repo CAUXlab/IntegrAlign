@@ -244,6 +244,7 @@ IntegrAlign relies on several Python libraries, listed in the setup.py file:
 - napari[all]
 - tk
 - opencv-python
+- openpyxl
 - SimpleITK
 - scikit-image
 - matplotlib
