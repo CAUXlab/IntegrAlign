@@ -7,7 +7,7 @@ import gc
 import matplotlib.pyplot as plt
 
 class ImageManualAlignmentApp:
-    def __init__(self, master, img1_8bit, img2_8bit, panels, annotations_resized, brightness_factor):
+    def __init__(self, master, img1_8bit, img2_8bit, panels, brightness_factor):
         self.master = master
         self.master.title("Image Alignment Tool")
 

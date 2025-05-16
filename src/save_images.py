@@ -49,33 +49,40 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
             (channels1, scale_percent1, channels2, scale_percent2,  
             img1, img2, img1_resize, img2_resize, img1_resize_ori, img2_resize_ori) = load_downscaled_imgs(scans_path1, scans_path2, id)
 
-            annotations_resized = []
-            for panel in panels:
-                # Get the panel path
-                index = panels_all.index(panel)
-                annotations = annotations_paths[index]
-                # Get the file path corresponding to id
-                # Get annotations
-                artefacts_empty_alignment = {}
-                analysis_area_alignment = {}
-                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
-                annotation_file_path = next(
-                    (os.path.join(annotations, f) for f in os.listdir(annotations) 
-                    if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
-                    None
-                )
-                ## Get the annotations
-                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
-                analysis_area_gdf_poly = analysis_area_alignment[panel]
-                if index == 0:
-                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, image_shape = img1_resize.shape, img_resize = img1_resize)
-                    annotations_resized.append(analysis_area_polygons)
-                else:
-                    analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent2, image_shape = img2_resize.shape, img_resize = img2_resize)
-                    annotations_resized.append(analysis_area_polygons)
-                
+            if annotations_paths:
+                annotations_resized = []
+                for panel in panels:
+                    # Get the panel path
+                    index = panels_all.index(panel)
+                    annotations = annotations_paths[index]
+                    # Get the file path corresponding to id
+                    # Get annotations
+                    artefacts_empty_alignment = {}
+                    analysis_area_alignment = {}
+                    # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                    annotation_file_path = next(
+                        (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                        if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                        None
+                    )
+                    ## Get the annotations
+                    artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
+                    analysis_area_gdf_poly = analysis_area_alignment[panel]
+                    if index == 0:
+                        analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent1, image_shape = img1_resize.shape, img_resize = img1_resize)
+                        annotations_resized.append(analysis_area_polygons)
+                    else:
+                        analysis_area_polygons = get_polygon(analysis_area_gdf_poly, scale_percent2, image_shape = img2_resize.shape, img_resize = img2_resize)
+                        annotations_resized.append(analysis_area_polygons)
+                    
+
+            #plt.tight_layout()
             ## Cropping step
-            app = ImageCropperApp(tk.Toplevel(root), img1_resize, img2_resize, panels, annotations_resized, brightness_factor)
+            if annotations_paths:
+                app = ImageCropperApp(tk.Toplevel(root), img1_resize, img2_resize, panels, brightness_factor, annotations_resized)
+            else:
+                app = ImageCropperApp(tk.Toplevel(root), img1_resize, img2_resize, panels, brightness_factor)
+
             root.mainloop()
             if app.saved:
                 cropped_images_dict = app.cropped_images
@@ -100,7 +107,7 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 crop_coords2 = (0, 0)
 
             ## Manual alignment step
-            app = ImageManualAlignmentApp(tk.Toplevel(root), img1_resize, img2_resize, panels, annotations_resized, brightness_factor)
+            app = ImageManualAlignmentApp(tk.Toplevel(root), img1_resize, img2_resize, panels, brightness_factor)
             root.mainloop()
             
             

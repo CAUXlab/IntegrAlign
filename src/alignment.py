@@ -90,29 +90,35 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
                 # Get the panel path
                 index = panels_all.index(panel)
                 coordinate_table = coordinate_tables[index]
-                annotations = annotations_paths[index]
                 # Get the file path corresponding to id
                 csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
-                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
-                annotation_file_path = next(
-                    (os.path.join(annotations, f) for f in os.listdir(annotations) 
-                    if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
-                    None
-                )
-                ## Get the coordinates table and annotations
+                ## Get the coordinates table
                 cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
-                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
+                ## Get the annotations if given
+                if annotations_paths:
+                    annotations = annotations_paths[index]
+                    # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                    annotation_file_path = next(
+                        (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                        if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                        None
+                    )
+                    artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
             ## Create the alignment report
             print("Creating the alignment report...")
             outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment = alignment_report(id, name_alignment, panels_alignment, cell_coordinates, metadata_images, output_path, 
                                                                                                     alpha_red, img1_resize, img2_resize, simg2_Rigid, outTx_Rigid, outTx_Bspline_dict, simg2_dict, 
                                                                                                     execution_time_dict, metric_values_dict, spline_order, resolution_micron, pixel_size_raster_micron, 
                                                                                                     metric_ms_alignment, img_resize_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment)
-        ## Transform and merge the annotations
-        print("-----")
-        print("Merging the annotations...")    
-        mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
-                          img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
+        if annotations_paths:
+            ## Transform and merge the annotations
+            print("-----")
+            print("Merging the annotations...")    
+            mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
+                            img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
+        else:
+            mask = None
+            
         # If the intersection of the analysis area is empty
         # Doesn't save merge coordinates, tables or plots
         # Continue to the next iteration
@@ -553,7 +559,7 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
         ## Check for the annotation types (non-case sensitive)
         # annotations_empty = ['Artefacts', 'Manual_Artefacts', 'Empty', 'No_tissue']
         # artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name').lower() in [item.lower() for item in annotations_empty])]
-        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in annotations_empty))]
+        artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in annotations_names_Empty))]
 
         # print(artefacts_empty_gdf['classification'].apply(lambda x: x.get('name')).unique())
         ## Convert LineString to Polygon
@@ -569,7 +575,7 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
 
         ## Get the analysis area annotation
         # analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: x.get('name') in ['Analysis_area'])]
-        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in ['Analysis_area']))]
+        analysis_area_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.get('name').lower() for item in annotations_names_AnalysisArea))]
         # Convert LineString to Polygon
         analysis_area_gdf_poly = analysis_area_gdf['geometry'].apply(lambda geom: Polygon(list(geom.coords) + [geom.coords[0]]))
         '''

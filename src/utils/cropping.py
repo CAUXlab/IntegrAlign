@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 class ImageCropperApp:
-    def __init__(self, root, img1, img2, panels, annotations_resized, brightness_factor):
+    def __init__(self, root, img1, img2, panels, brightness_factor, annotations_resized = None):
         self.root = root
         self.root.title("Image Cropper")
 
@@ -49,16 +49,17 @@ class ImageCropperApp:
         self.canvas1.create_image(0, 0, anchor=tk.NW, image=self.img1_tk)
         self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.img2_tk)
 
-        # Store annotations
-        self.annotations_resized = annotations_resized
+        if annotations_resized:
+            # Store annotations
+            self.annotations_resized = annotations_resized
 
-        # Draw annotations with scaling
-        self.draw_annotations(self.canvas1, self.annotations_resized[0], "red", 
-                              self.original_img1.width, self.original_img1.height, 
-                              self.img1_resized.width, self.img1_resized.height)
-        self.draw_annotations(self.canvas2, self.annotations_resized[1], "red", 
-                              self.original_img2.width, self.original_img2.height, 
-                              self.img2_resized.width, self.img2_resized.height)
+            # Draw annotations with scaling
+            self.draw_annotations(self.canvas1, self.annotations_resized[0], "red", 
+                                self.original_img1.width, self.original_img1.height, 
+                                self.img1_resized.width, self.img1_resized.height)
+            self.draw_annotations(self.canvas2, self.annotations_resized[1], "red", 
+                                self.original_img2.width, self.original_img2.height, 
+                                self.img2_resized.width, self.img2_resized.height)
 
         # Image Labels
         self.img1_label = tk.Label(root, text= f'Panel {self.panels[0]}')

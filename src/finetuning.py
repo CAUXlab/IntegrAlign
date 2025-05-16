@@ -91,18 +91,19 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
             # Get the panel path
             index = panels_all.index(panel)
             coordinate_table = coordinate_tables[index]
-            annotations = annotations_paths[index]
             # Get the file path corresponding to id
             csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
-            # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
-            annotation_file_path = next(
-                (os.path.join(annotations, f) for f in os.listdir(annotations) 
-                if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
-                None
-            )
             ## Get the coordinates table and annotations
             cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
-            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
+            if annotations_paths:
+                annotations = annotations_paths[index]
+                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                annotation_file_path = next(
+                    (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                    if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                    None
+                )
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
         ## Create the alignment report
         print("Creating the alignment report...")
         outTx_Rigid_alignment, outTx_Bspline_alignment, img_resize_alignment, metric_ms_alignment = alignment_report(id, name_alignment, panels_alignment, cell_coordinates, metadata_images, output_path, 
@@ -124,14 +125,17 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
         print("Exiting the script without rewriting the annotations file.")
         sys.exit()  # Exit the script immediately
 
-    ## Transform and merge the annotations
-    print("-----")
-    print("Merging the annotations...") 
-    mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
-                        img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
-    
-    if visualization != "0":
-        mask = merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron)
+    if annotations_paths:
+        ## Transform and merge the annotations
+        print("-----")
+        print("Merging the annotations...") 
+        mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
+                            img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
+        
+        if visualization != "0":
+            mask = merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron)
+    else:
+        mask = None
 
     ## Transform and filter coordinates
     print("Transform, filer and merge coordinates...")
@@ -408,6 +412,7 @@ def load_high_res_imgs(folder_path1, folder_path2, id, panels):
         ## Load images
         channels1, img1_data, sizeY_compressed1, sizeY_fullres1 = load_QPTIFF_high_res(path1)
         channels2, img2_data, sizeY_compressed2, sizeY_fullres2 = load_QPTIFF_high_res(path2)
+        tif = False
 
     elif path1.endswith('.tif') and path2.endswith('.tif'):
         print(f"Loading .tif images...")
