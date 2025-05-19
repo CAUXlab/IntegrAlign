@@ -355,7 +355,23 @@ def get_data_alignment_qptiff(path_scan):
     tif_tags = {tag.name: tag.value for tag in tif.pages[0].tags.values()}
     # Parse the XML content
     xml_content = tif_tags.get("ImageDescription", "").replace("\r\n", "").replace("\t", "")
-    channels = generate_channels_list(xml_content)
+
+    try:
+        channels = generate_channels_list(xml_content, tif_tags)
+    except ValueError as e:
+        channel_list, channel_name_dictionary = getLabels(tif_tags)
+        # Build channels in same format as JSON-based structure
+        channels = []
+        for i, label in enumerate(channel_list):
+            # Extract fluorophore name from label: e.g., "Opal 570" from "Opal 570 (channel 1)"
+            name_part = label.split(" (")[0]
+            rgb = opal_to_rgb(name_part)
+
+            channels.append({
+                "id": i + 1,
+                "name": label,
+                "rgb": rgb
+            })
     # Load the most compressed DAPI image in .pages
     img_resize = tif.series[0].levels[-1].asarray()[0]
     sizeY_fullres = tif_tags['ImageLength']
@@ -393,7 +409,7 @@ def opal_to_rgb(opal_name):
     }
     return opal_rgb_map.get(opal_name, '0')  # Default to white
 
-def generate_channels_list(xml_content):
+def generate_channels_list(xml_content, tif_tags):
     """Generates a structured list of channels with IDs and RGB values."""
     json_data = extract_json_from_xml(xml_content)
     spectra = json_data.get("spectra", [])
@@ -412,6 +428,37 @@ def generate_channels_list(xml_content):
         })
 
     return channels
+
+def getLabels(tif_tags):
+    substr = "<ScanColorTable-k>"
+    start = 0
+    if tif_tags['ImageDescription'].find(substr, start) != -1:  
+        strings = []
+        while True:
+            start = tif_tags['ImageDescription'].find(substr, start)
+            if start == -1: # when '<ScanColorTable-k>' is not found
+                break
+            string = tif_tags['ImageDescription'][start+18:start+26]
+            strings.append(string)
+            start += 1
+        marquages = []
+        wl = []
+        for s in strings:
+            if s.startswith('DAPI'):
+                marquages.append(s[0:4])
+                wl.append('450')
+            if s.startswith('Opal'):
+                marquages.append(s)
+                wl.append(s[5:])
+                
+        dictionary = {key: value for key, value in enumerate(wl)}
+        # change to detailled list
+        channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
+    else:
+        dictionary = {'DAPI': '450'}
+        channel_list = ['450 (channel DAPI)']
+
+    return channel_list, dictionary
 
 def get_data_alignment_tif(path_scan):
     tif = TiffFile(path_scan, is_ome=False)

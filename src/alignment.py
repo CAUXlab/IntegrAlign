@@ -117,7 +117,7 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
             mask = merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, 
                             img_resize_alignment, metric_ms_alignment, metadata_images, panels_all, reference_panel, resolution_micron, output_path)
         else:
-            mask = None
+            mask = "No_annotations"
             
         # If the intersection of the analysis area is empty
         # Doesn't save merge coordinates, tables or plots
@@ -1520,11 +1520,15 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     coords_tr = scaled_pointsTR/scale_percent2
     cell_coordinates[f'{panels_alignment[0]}_panel_DAPI_transformed'] = coords_tr
 
-    # Create boolean mask indicating which points are inside any polygon in the mask
-    mask_contains = shapely.vectorized.contains(mask, coords_tr[:, 0], coords_tr[:, 1])
-    # Filter points based on the boolean mask
-    filtered_coords_tr = coords_tr[mask_contains]
-    filtered_ids = ids[mask_contains]
+    if mask == "No_annotations":
+        filtered_coords_tr = coords_tr
+        filtered_ids = ids
+    else:
+        # Create boolean mask indicating which points are inside any polygon in the mask
+        mask_contains = shapely.vectorized.contains(mask, coords_tr[:, 0], coords_tr[:, 1])
+        # Filter points based on the boolean mask
+        filtered_coords_tr = coords_tr[mask_contains]
+        filtered_ids = ids[mask_contains]
     
     print('Nb cells before :', len(coords_tr))
     print('Nb cells after filrtering :', len(filtered_coords_tr))
@@ -1588,11 +1592,16 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     # Generate IDs
     ids = np.arange(len(coords))
 
-    # Create boolean mask indicating which points are inside any polygon in the mask
-    mask_contains = shapely.vectorized.contains(mask, coords[:, 0], coords[:, 1])
-    # Filter points based on the boolean mask
-    filtered_coords = coords[mask_contains]
-    filtered_ids = ids[mask_contains]
+    
+    if mask == "No_annotations":
+        filtered_coords = coords
+        filtered_ids = ids
+    else:
+        # Create boolean mask indicating which points are inside any polygon in the mask
+        mask_contains = shapely.vectorized.contains(mask, coords[:, 0], coords[:, 1])
+        # Filter points based on the boolean mask
+        filtered_coords = coords[mask_contains]
+        filtered_ids = ids[mask_contains]
 
     print('Nb cells before :', len(coords))
     print('Nb cells after filrtering :', len(filtered_coords))

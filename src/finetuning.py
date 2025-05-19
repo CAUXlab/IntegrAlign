@@ -27,7 +27,7 @@ from src.alignment import remove_params, extract_downscaled_images
 from src.alignment import get_cells_coordinates_SPIAT_CellType, get_annotations
 from src.alignment import alignment_report
 
-from src.save_images import panels_name_alignment, generate_channels_list
+from src.save_images import panels_name_alignment, generate_channels_list, opal_to_rgb
 
 from src.alignment import merge_annotations, get_gdf, transform_annotation, rotate_coordinates_angle, scale_multipolygon_coordinates, plot_multipolygon
 from src.alignment import transform_filter_coordinates, filter_coordinates
@@ -135,7 +135,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
         if visualization != "0":
             mask = merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron)
     else:
-        mask = None
+        mask = "No_annotations"
 
     ## Transform and filter coordinates
     print("Transform, filer and merge coordinates...")
@@ -316,45 +316,27 @@ def imageRegBspline(fixed,moving,transformDomainMeshSize,spline_order,metric):
 
 
 
-
-
-def getLabels(tif_tags, nb_channels):
-    substr = "<ScanColorTable-k>"
-    start = 0
-    if tif_tags['ImageDescription'].find(substr, start) != -1:  
-        strings = []
-        while True:
-            start = tif_tags['ImageDescription'].find(substr, start)
-            if start == -1: # when '<ScanColorTable-k>' is not found
-                break
-            string = tif_tags['ImageDescription'][start+18:start+26]
-            strings.append(string)
-            start += 1
-        marquages = []
-        wl = []
-        for s in strings:
-            if s.startswith('DAPI'):
-                marquages.append(s[0:4])
-                wl.append('450')
-            if s.startswith('Opal'):
-                marquages.append(s)
-                wl.append(s[5:])
-                
-        dictionary = {key: value for key, value in enumerate(wl)}
-        # change to detailled list
-        channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
-    else:
-        dictionary = {'DAPI': '450'}
-        channel_list = ['450 (channel DAPI)']
-
-    return channel_list, dictionary
-
 def load_QPTIFF_high_res(path_scan):
     tif = TiffFile(path_scan)
     tif_tags = {tag.name: tag.value for tag in tif.pages[0].tags.values()}
     # Parse the XML content
     xml_content = tif_tags.get("ImageDescription", "").replace("\r\n", "").replace("\t", "")
-    channels = generate_channels_list(xml_content)
+    try:
+        channels = generate_channels_list(xml_content, tif_tags)
+    except ValueError as e:
+        channel_list, channel_name_dictionary = getLabels(tif_tags)
+        # Build channels in same format as JSON-based structure
+        channels = []
+        for i, label in enumerate(channel_list):
+            # Extract fluorophore name from label: e.g., "Opal 570" from "Opal 570 (channel 1)"
+            name_part = label.split(" (")[0]
+            rgb = opal_to_rgb(name_part)
+
+            channels.append({
+                "id": i + 1,
+                "name": label,
+                "rgb": rgb
+            })
     # Load the second compressed image channels in .pages
     img_data = tif.series[0].levels[2].asarray()
     sizeY_fullres2 = tif_tags['ImageLength']
