@@ -84,26 +84,22 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
                 app = ImageCropperApp(tk.Toplevel(root), img1_resize, img2_resize, panels, brightness_factor)
 
             root.mainloop()
-            if app.saved:
-                cropped_images_dict = app.cropped_images
-                if panels[0] in cropped_images_dict:
-                    img1_resize = cropped_images_dict[panels[0]][0]
-                    # Convert to sitk image format
-                    img1 = sitk.GetImageFromArray(img1_resize)
-                    # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
-                    crop_coords1 = cropped_images_dict[panels[0]][1]
-                else:
-                    crop_coords1 = (0, 0)
-                if panels[1] in cropped_images_dict:
-                    img2_resize = cropped_images_dict[panels[1]][0]
-                    # Convert to sitk image format
-                    img2 = sitk.GetImageFromArray(img2_resize)
-                    # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
-                    crop_coords2 = cropped_images_dict[panels[1]][1]
-                else:
-                    crop_coords2 = (0, 0)
+            cropped_images_dict = app.cropped_images
+            if panels[0] in cropped_images_dict:
+                img1_resize = cropped_images_dict[panels[0]][0]
+                # Convert to sitk image format
+                img1 = sitk.GetImageFromArray(img1_resize)
+                # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
+                crop_coords1 = cropped_images_dict[panels[0]][1]
             else:
                 crop_coords1 = (0, 0)
+            if panels[1] in cropped_images_dict:
+                img2_resize = cropped_images_dict[panels[1]][0]
+                # Convert to sitk image format
+                img2 = sitk.GetImageFromArray(img2_resize)
+                # Get the coordinates of the cropping for origin coordinate/ top-left corner of the image
+                crop_coords2 = cropped_images_dict[panels[1]][1]
+            else:
                 crop_coords2 = (0, 0)
 
             ## Manual alignment step

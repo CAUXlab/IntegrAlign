@@ -68,6 +68,8 @@ class ImageManualAlignmentApp:
         self.rotation_slider.set(0)
         self.rotation_slider.pack(fill=tk.X, padx=10, pady=5)
 
+
+
         # Dragging variables
         self.dragging = False
         self.last_x = 0
@@ -172,6 +174,7 @@ class ImageManualAlignmentApp:
         # Store offsets in case you want to reference them later
         self.rotation_offset_x = offset_x
         self.rotation_offset_y = offset_y
+
 
 
     def start_drag(self, event):

@@ -27,7 +27,7 @@ from src.alignment import remove_params, extract_downscaled_images
 from src.alignment import get_cells_coordinates_SPIAT_CellType, get_annotations
 from src.alignment import alignment_report
 
-from src.save_images import panels_name_alignment, generate_channels_list, opal_to_rgb
+from src.save_images import panels_name_alignment, generate_channels_list, opal_to_rgb, getLabels
 
 from src.alignment import merge_annotations, get_gdf, transform_annotation, rotate_coordinates_angle, scale_multipolygon_coordinates, plot_multipolygon
 from src.alignment import transform_filter_coordinates, filter_coordinates

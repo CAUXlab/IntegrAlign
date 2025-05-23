@@ -68,6 +68,22 @@ class ImageCropperApp:
         self.img2_label = tk.Label(root, text= f'Panel {self.panels[1]}')
         self.img2_label.grid(row=1, column=1)
 
+        # Brightness sliders
+        self.brightness_slider1 = tk.Scale(root, from_=0.1, to=20.0, resolution=0.1, orient=tk.HORIZONTAL,
+                                        label="Brightness", command=self.update_brightness_img1)
+        self.brightness_slider1.set(1.0)
+        self.brightness_slider1.grid(row=5, column=0)
+
+        self.brightness_slider2 = tk.Scale(root, from_=0.1, to=20.0, resolution=0.1, orient=tk.HORIZONTAL,
+                                        label="Brightness", command=self.update_brightness_img2)
+        self.brightness_slider2.set(1.0)
+        self.brightness_slider2.grid(row=5, column=1)
+
+        self.reset_button = Button(root, text="Reset Brightness", command=self.reset_brightness)
+        self.reset_button.grid(row=5, column=0, columnspan=2)
+
+
+
 
 
         # Save status label
@@ -112,6 +128,48 @@ class ImageCropperApp:
         """Increase brightness of grayscale image while preserving mode."""
         enhancer = ImageEnhance.Brightness(pil_image)
         return enhancer.enhance(factor)  # Factor > 1 brightens, < 1 darkens
+
+    def update_brightness_img1(self, event=None):
+        """Update brightness of image 1 live based on slider."""
+        self.brightness_factor1 = float(self.brightness_slider1.get())
+        self.img1 = self.adjust_brightness(self.original_img1.copy(), self.brightness_factor1)
+        self.img1_resized = self.resize_image(self.img1, self.canvas_width, self.canvas_height)
+        self.img1_tk = ImageTk.PhotoImage(self.img1_resized)
+        self.canvas1.delete("all")
+        self.canvas1.create_image(0, 0, anchor=tk.NW, image=self.img1_tk)
+
+        if hasattr(self, 'annotations_resized') and self.annotations_resized:
+            # Draw annotations with scaling
+            self.draw_annotations(self.canvas1, self.annotations_resized[0], "red", 
+                                self.original_img1.width, self.original_img1.height, 
+                                self.img1_resized.width, self.img1_resized.height)
+            self.draw_annotations(self.canvas2, self.annotations_resized[1], "red", 
+                                self.original_img2.width, self.original_img2.height, 
+                                self.img2_resized.width, self.img2_resized.height)
+
+    def update_brightness_img2(self, event=None):
+        """Update brightness of image 2 live based on slider."""
+        self.brightness_factor2 = float(self.brightness_slider2.get())
+        self.img2 = self.adjust_brightness(self.original_img2.copy(), self.brightness_factor2)
+        self.img2_resized = self.resize_image(self.img2, self.canvas_width, self.canvas_height)
+        self.img2_tk = ImageTk.PhotoImage(self.img2_resized)
+        self.canvas2.delete("all")
+        self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.img2_tk)
+
+        if hasattr(self, 'annotations_resized') and self.annotations_resized:
+            # Draw annotations with scaling
+            self.draw_annotations(self.canvas1, self.annotations_resized[0], "red", 
+                                self.original_img1.width, self.original_img1.height, 
+                                self.img1_resized.width, self.img1_resized.height)
+            self.draw_annotations(self.canvas2, self.annotations_resized[1], "red", 
+                                self.original_img2.width, self.original_img2.height, 
+                                self.img2_resized.width, self.img2_resized.height)
+            
+    def reset_brightness(self):
+        self.brightness_slider1.set(1.0)
+        self.brightness_slider2.set(1.0)
+        self.update_brightness_img1(1.0)
+        self.update_brightness_img2(1.0)
 
     def resize_image(self, img, width, height):
         img.thumbnail((width, height), Image.Resampling.LANCZOS)
@@ -172,14 +230,19 @@ class ImageCropperApp:
             # Crop the original np array
             cropped_img1 = self.img1_8bit[orig_y1:orig_y2, orig_x1:orig_x2]
 
+            mean_val = cropped_img1.mean()
+            brightened_cropped_img1 = cropped_img1 * self.brightness_factor1 + (1 - self.brightness_factor1) * mean_val
+            # Clip values to stay within [0, 255]
+            brightened_cropped_img1 = np.clip(brightened_cropped_img1, 0, 255).astype(np.float32)
+
+
             # Store both the cropped image and the crop coordinates
-            self.cropped_images[self.panels[0]] = (cropped_img1, (orig_x1, orig_y1))
+            self.cropped_images[self.panels[0]] = (brightened_cropped_img1, (orig_x1, orig_y1))
 
             # Update canvas
             self.img1 = self.array_to_image(cropped_img1)
             # Increase brightness manually before displaying to compensate the grayscale to RGB conversion for tkinter
-            brightness_factor = 5
-            self.img1 = self.adjust_brightness(self.img1, brightness_factor)
+            self.img1 = self.adjust_brightness(self.img1, self.brightness_factor1)
 
             self.img1_resized = self.resize_image(self.img1, self.canvas_width, self.canvas_height)
             self.img1_tk = ImageTk.PhotoImage(self.img1_resized)
@@ -199,12 +262,16 @@ class ImageCropperApp:
 
             cropped_img2 = self.img2_8bit[orig_y1:orig_y2, orig_x1:orig_x2]
 
-            self.cropped_images[self.panels[1]] = (cropped_img2, (orig_x1, orig_y1))
+            mean_val = cropped_img2.mean()
+            brightened_cropped_img2 = cropped_img2 * self.brightness_factor2 + (1 - self.brightness_factor2) * mean_val
+            # Clip values to stay within [0, 255]
+            brightened_cropped_img2 = np.clip(brightened_cropped_img2, 0, 255).astype(np.float32)
+
+            self.cropped_images[self.panels[1]] = (brightened_cropped_img2, (orig_x1, orig_y1))
 
             self.img2 = self.array_to_image(cropped_img2)
             # Increase brightness manually before displaying to compensate the grayscale to RGB conversion for tkinter
-            brightness_factor = 5
-            self.img2 = self.adjust_brightness(self.img2, brightness_factor)
+            self.img2 = self.adjust_brightness(self.img2, self.brightness_factor2)
 
             self.img2_resized = self.resize_image(self.img2, self.canvas_width, self.canvas_height)
             self.img2_tk = ImageTk.PhotoImage(self.img2_resized)
@@ -217,5 +284,18 @@ class ImageCropperApp:
         self.saved = True
 
     def close_window(self):
+
+        cropped_img1 = self.img1_8bit
+        mean_val = cropped_img1.mean()
+        brightened_cropped_img1 = cropped_img1 * self.brightness_factor1 + (1 - self.brightness_factor1) * mean_val
+        brightened_cropped_img1 = np.clip(brightened_cropped_img1, 0, 255).astype(np.float32)
+        self.cropped_images[self.panels[0]] = (brightened_cropped_img1, (0, 0))
+
+        cropped_img2 = self.img2_8bit
+        mean_val = cropped_img2.mean()
+        brightened_cropped_img2 = cropped_img2 * self.brightness_factor2 + (1 - self.brightness_factor2) * mean_val
+        brightened_cropped_img2 = np.clip(brightened_cropped_img2, 0, 255).astype(np.float32)
+        self.cropped_images[self.panels[1]] = (brightened_cropped_img2, (0, 0))
+
         self.root.quit() 
         self.root.destroy()
