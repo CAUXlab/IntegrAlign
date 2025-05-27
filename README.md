@@ -82,7 +82,7 @@ IntegrAlign requires three main types of files to align multi-IF slides:
    
    - Filenames must start with the patient ID, followed by an underscore (_).
 
-Example folder structure:
+Example:
 ```bash
 DC/
 ├── 0001_pDC.annotations
