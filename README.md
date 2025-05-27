@@ -64,7 +64,7 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
 <u>2. Annotation Files</u>
 
-- Supported formats: .annotations or .geojson
+- Supported formats: .annotations (HALO) or .geojson
 
 <u>3. Coordinate Tables</u>
 
