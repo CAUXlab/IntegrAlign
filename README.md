@@ -83,7 +83,7 @@ IntegrAlign requires three main types of files to align multi-IF slides:
    - Filenames must start with the patient ID, followed by an underscore (_).
 
 Example folder structure:
-
+```bash
 DC/
 ├── 0001_pDC.annotations
 ├── 0001_pDC.qptiff
@@ -93,6 +93,7 @@ TLS/
 ├── 0001_pTLS.annotations
 ├── 0001_pTLS.qptiff
 └── 0001_pTLS.csv
+```
 
    - Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables that should contain :
    
