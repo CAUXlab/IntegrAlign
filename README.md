@@ -152,6 +152,8 @@ Enter numbers (comma-separated) for 'Empty' annotations: 8, 9
 ✅ Selected Artefacts names: ['Artefacts_MI', 'Artefacts_T', 'Manual_artefacts_MI', 'Manual_artefacts_T']
 ✅ Selected Empty names: ['No_tissue_MI', 'No_tissue_T']
 ```
+
+If your AnalysisArea annotation is in the Empty annotation as NegativeROA='1' then press enter for _Selected AnalysisArea names:_ and IntegrAlign will use the largest polygon in the Empty annotation with NegativeROA='1' as AnalysisArea.
   
 </ins>Important:</ins> If you have multiple analysis areas (e.g., Tumor and Margin Invasion), the tool will compute the intersection of these areas after alignment across panels. Since annotations may not perfectly overlap between panels, this could lead to the exclusion of cells located at the boundaries between regions (often the most biologically relevant cells).
 To prevent this, consider creating a unified (global) analysis area annnotation that encompasses all regions of interest to ensure no important cells are excluded.
