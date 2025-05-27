@@ -87,12 +87,18 @@ Example folder structure:
 DC/
 ├── 0001_pDC.annotations
 ├── 0001_pDC.qptiff
-└── 0001_pDC.csv
+├── 0001_pDC.csv
+├── 0002_pDC.annotations
+├── 0002_pDC.qptiff
+└── 0002_pDC.csv
 
 TLS/
 ├── 0001_pTLS.annotations
 ├── 0001_pTLS.qptiff
-└── 0001_pTLS.csv
+├── 0001_pTLS.csv
+├── 0002_pTLS.annotations
+├── 0002_pTLS.qptiff
+└── 0002_pTLS.csv
 ```
 
    - Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables that should contain :
