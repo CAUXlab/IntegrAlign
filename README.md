@@ -70,17 +70,21 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
 - Format: .csv
 
-- Requirements: The coordinates must be in the same coordinate system as the corresponding image. If any rotation or translation has been applied (e.g., in HALO), the coordinates may no longer match the image directly. As a result, the transformation will be applied on false coordinates resulting in errors in the final table.
+- Requirements:
 
-   - Can include XMin, XMax, YMin, and YMax columns (pixel coordinates, e.g. HALO outputs).
-
-   - Or x and y columns (coordinates in microns, e.g. inForm outputs).
-
-- Important:
-  
-   - All files (images, annotations, and coordinate tables) must be placed in their corresponding panel folders.
+   - The coordinates must be in pixel and in the same coordinate system as the corresponding image. Note: If any rotation or translation has been applied in HALO, this can be handled using the --HALOrotation option in the Save downscaled images step.
    
-   - Filenames must start with the patient ID, followed by an underscore (_).
+   - Avoid using raw HALO or Inform outputs that include Intensity and Classification columns, as functional marker interpretation between aligned panels is unreliable — cells don’t perfectly correspond across serial slides. Instead, select the appropriate cell types to prevent false double positives. Preprocess your tables into finalized versions containing at least one of the following coordinate formats:
+   
+      - XMin, XMax, YMin, YMax columns (pixel coordinates), or
+   
+      - x, y columns (pixel coordinates).
+
+<ins>Structure:</ins>
+  
+- All files (images, annotations, and coordinate tables) must be placed in their corresponding panel folders.
+
+- Filenames must start with the patient ID, followed by an underscore (_).
 
 Example:
 ```bash
@@ -101,13 +105,7 @@ TLS/
 └── 0002_pTLS.csv
 ```
 
-   - Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables that should contain :
-   
-   - Avoid using raw HALO or Inform outputs that include Intensity and Classification columns, as functional marker interpretation between aligned panels is unreliable — cells don’t perfectly correspond across serial slides. Instead, select the appropriate cell types to prevent false double positives. Preprocess your tables into finalized versions containing at least one of the following coordinate formats:
 
-      - XMin, XMax, YMin, YMax columns (pixel coordinates), or
-
-      - x, y columns (pixel coordinates).
 
 ### 1 Visualization
 
