@@ -66,8 +66,6 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
 - Supported formats: .annotations or .geojson
 
-- Important: To avoid mismatches, ensure annotation names are consistent across patients or use the --names argument to provide all possible names for each categorie.
-
 <u>3. Coordinate Tables</u>
 
 - Format: .csv
@@ -78,18 +76,38 @@ IntegrAlign requires three main types of files to align multi-IF slides:
 
    - Or x and y columns (coordinates in microns, e.g. inForm outputs).
 
-- Important: Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables with :
+- Important:
+  
+   - All files (images, annotations, and coordinate tables) must be placed in their corresponding panel folders.
+   
+   - Filenames must start with the patient ID, followed by an underscore (_).
 
-   - HALO : XMin, XMax, YMin, YMax, cell_id, cell_type (from lineage markers), and phenotype (all positive marker in order to have the functional information).
+Example folder structure:
 
-   - Inform : x (in µm), y (in µm) , cell_id, cell_type, and phenotype.
+DC/
+├── 0001_pDC.annotations
+├── 0001_pDC.qptiff
+└── 0001_pDC.csv
+
+TLS/
+├── 0001_pTLS.annotations
+├── 0001_pTLS.qptiff
+└── 0001_pTLS.csv
+
+   - Avoid raw HALO / Inform outputs with Intensity and Classication columns as **you cannot infer functional markers between aligned panel since cells aren't exactly the same between serial slides**. Instead chose the corresponding cell types to avoid double positive cells and preprocess the tables into final tables that should contain :
+   
+   - Avoid using raw HALO or Inform outputs that include Intensity and Classification columns, as functional marker interpretation between aligned panels is unreliable — cells don’t perfectly correspond across serial slides. Instead, select the appropriate cell types to prevent false double positives. Preprocess your tables into finalized versions containing at least one of the following coordinate formats:
+
+      - XMin, XMax, YMin, YMax columns (pixel coordinates), or
+
+      - x, y columns (pixel coordinates).
 
 ### 1 Visualization
 
 Once you have activated your virtual environment and installed the necessary dependencies, you can run the first step of the tool by using:
 
 ```bash
-python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --namesEmpty Empty No_tissue --namesArtefacts Artefacts Manual_Artefacts --namesAnalysisArea Analysis_Area --panels T DC TLS --output "output/"
+python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --panels T DC TLS --output "output/"
 ```
 
 This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help identify which slides cannot be aligned, saving time when processing large patient cohorts.
@@ -100,12 +118,32 @@ This steps will create a report file ```images_report.html``` that plots every p
 
 --annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Optional.
 
---namesEmpty - Name(s) of the empty areas in the annotations files.
+To avoid mismatches and capture all corresponding annotation names across patients—even if they vary—this step displays every annotation name found in the provided annotation files. This allows you to easily identify and group all possible names for each category (AnalysisArea, Artefacts/ ManualArtefacts, EmptyArea).
+Here is an example:
 
---namesArtefacts - Name(s) of the Artefacts areas in the annotations files. 
+`Found the following unique annotation names:
+1: Analysis_area_MI
+2: Analysis_area_T
+3: Analysis_area_Total
+4: Artefacts_MI
+5: Artefacts_T
+6: Manual_artefacts_MI
+7: Manual_artefacts_T
+8: No_tissue_MI
+9: No_tissue_T
+10: Stroma_MI
+11: Stroma_T
+12: Tumor_MI
+13: Tumor_T
 
---namesAnalysisArea - Name(s) of the Analysis areas in the annotations files.
+Enter numbers (comma-separated) for 'AnalysisArea' annotations: 3
+Enter numbers (comma-separated) for 'Artefacts' annotations: 4, 5, 6, 7
+Enter numbers (comma-separated) for 'Empty' annotations: 8, 9
 
+✅ Selected AnalysisArea names: ['Analysis_area_Total']
+✅ Selected Artefacts names: ['Artefacts_MI', 'Artefacts_T', 'Manual_artefacts_MI', 'Manual_artefacts_T']
+✅ Selected Empty names: ['No_tissue_MI', 'No_tissue_T']`
+  
 </ins>Important:</ins> If you have multiple analysis areas (e.g., Tumor and Margin Invasion), the tool will compute the intersection of these areas after alignment across panels. Since annotations may not perfectly overlap between panels, this could lead to the exclusion of cells located at the boundaries between regions (often the most biologically relevant cells).
 To prevent this, consider creating a unified (global) analysis area annnotation that encompasses all regions of interest to ensure no important cells are excluded.
 
@@ -117,10 +155,14 @@ Notes : **The order is crucial** for --scans, --annotations and --panels options
 
 ### 2 Save downscaled images
 
-This step will preprocess the data by downscaling the paired images for alignment at the same compression level. Also you can appply cropping (slides with amygdales for control) and manual pre alignment (improve final results) and save the resulting images for the patients that have not been excluded. This will generate a file containing the downscaled images, allowing for alignment processing without needing access to the ```.qptiff``` files. An excel file (```Alignments_validated.xlsx```) will also be generated to track the validation status of each registration after the alignment step completed.
+This step preprocesses the data by downscaling paired images to the same compression level for alignment.
+You can adjust image brightness to achieve roughly consistent levels across panels, while maximizing contrast within analyzed tissue regions—ensuring that most relevant image detail is preserved.
+Apply cropping (e.g., for control slides containing tonsils), and perform manual pre-alignment to improve final results.
+The resulting images will be saved for all patients who have not been excluded. 
+This will generate a file containing the downscaled images, allowing for alignment processing without needing access to the image files. An excel file (```Alignments_validated.xlsx```) will also be generated to track the validation status of each registration after the alignment step completed.
 
 ```bash
-python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 02006 06001 08006
+python main_IntegrAlign.py saveimgs --params "output/params.json"
 ```
 
 <ins>Options:</ins>
@@ -129,7 +171,7 @@ python main_IntegrAlign.py saveimgs --params "output/params.json" --exclude 0200
 
 --exclude - Patient IDs to exclude from alignment.
 
---brightness - Brightness factor for the cropping and manual alignment visualization (optional). Value by default : 1
+--HALOrotation - Path to an Excel (.xlsx) file containing rotation information for each slide (optional). Use this when slides were rotated in HALO, causing output coordinates to be rotated but unchanged image file. The file must include ID_patient and Panel columns.
 
 
 ### 3 Alignment
@@ -202,7 +244,7 @@ Notes : The given parameters have to be in the same panel order as in step 1 Vis
 
 You can keep track of the alignments using the Alignments_validated.xlsx file located in your output directory. This file is generated during the second step (Save downscaled images).
 
-In the Alignment/merged_tables/ directory, you will find the merged coordinate tables for each patient. These tables contain the concatenated data from all panels, with coordinates transformed accordingly to the reference panel (except for the reference slide, whose coordinates remain unchanged) and in µm. A "Panel" column is also added to indicate which cells belong to which panel. If you need unique cell IDs across panels, you can concatenate the cell ID column with the panel name (using an underscore for example).
+In the Alignment/merged_tables/ directory, you will find the merged coordinate tables for each patient. These tables contain the concatenated data from all panels, with coordinates transformed accordingly to the reference panel (except for the reference slide, whose coordinates remain unchanged), in pixel and physical coordinate (µm). A "Panel" column is also added to indicate which cells belong to which panel. If you need unique cell IDs across panels, you can concatenate the cell ID column with the panel name (using an underscore for example).
 
 If the column names in the panel tables match, they will be merged. Any columns unique to specific panels will appear as NaN or empty cells in the resulting CSV for panels that don't include them.
 
