@@ -115,7 +115,7 @@ Once you have activated your virtual environment and installed the necessary dep
 python main_IntegrAlign.py visualize --scans "panel_T/SCANS/" "panel_DC/SCANS/" "panel_TLS/SCANS/" --annotations "T/Annotations/" "DC/Annotations/" "TLS/Annotations/" --panels T DC TLS --output "output/"
 ```
 
-This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help identify which slides cannot be aligned, saving time when processing large patient cohorts.
+This steps will create a report file ```images_report.html``` that plots every panels for each patients. This will help identify which slides cannot be aligned, allowing their exclusion in the saveimgs step, saving time when processing large patient cohorts.
 
 <ins>Options:</ins>
 
