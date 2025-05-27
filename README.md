@@ -121,7 +121,8 @@ This steps will create a report file ```images_report.html``` that plots every p
 To avoid mismatches and capture all corresponding annotation names across patients—even if they vary—this step displays every annotation name found in the provided annotation files. This allows you to easily identify and group all possible names for each category (AnalysisArea, Artefacts/ ManualArtefacts, EmptyArea).
 Here is an example:
 
-`Found the following unique annotation names:
+```python
+Found the following unique annotation names:
 1: Analysis_area_MI
 2: Analysis_area_T
 3: Analysis_area_Total
@@ -142,7 +143,8 @@ Enter numbers (comma-separated) for 'Empty' annotations: 8, 9
 
 ✅ Selected AnalysisArea names: ['Analysis_area_Total']
 ✅ Selected Artefacts names: ['Artefacts_MI', 'Artefacts_T', 'Manual_artefacts_MI', 'Manual_artefacts_T']
-✅ Selected Empty names: ['No_tissue_MI', 'No_tissue_T']`
+✅ Selected Empty names: ['No_tissue_MI', 'No_tissue_T']
+```
   
 </ins>Important:</ins> If you have multiple analysis areas (e.g., Tumor and Margin Invasion), the tool will compute the intersection of these areas after alignment across panels. Since annotations may not perfectly overlap between panels, this could lead to the exclusion of cells located at the boundaries between regions (often the most biologically relevant cells).
 To prevent this, consider creating a unified (global) analysis area annnotation that encompasses all regions of interest to ensure no important cells are excluded.
