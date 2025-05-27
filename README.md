@@ -119,6 +119,8 @@ This steps will create a report file ```images_report.html``` that plots every p
 
 --annotations - Paths to 2 or 3 panel folders of the annotation files (.geojson). Optional.
 
+Annotations are used to identify the overlapping analysed area between panels. Since analysis regions, artefacts, and empty areas can vary from one panel to another, it's important to define a shared tissue area to ensure consistency. This prevents a cell identified in one panel from being mapped to an empty or artefact region in another. To achieve this, we compute the intersection of the analysis areas across panels and subtract the merged artefact and empty regions.
+
 To avoid mismatches and capture all corresponding annotation names across patients—even if they vary—this step displays every annotation name found in the provided annotation files. This allows you to easily identify and group all possible names for each category (AnalysisArea, Artefacts/ ManualArtefacts, EmptyArea).
 Here is an example:
 
