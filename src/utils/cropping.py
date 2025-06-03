@@ -69,12 +69,12 @@ class ImageCropperApp:
         self.img2_label.grid(row=1, column=1)
 
         # Brightness sliders
-        self.brightness_slider1 = tk.Scale(root, from_=0.1, to=20.0, resolution=0.1, orient=tk.HORIZONTAL,
+        self.brightness_slider1 = tk.Scale(root, from_=0.1, to=40.0, resolution=0.1, orient=tk.HORIZONTAL,
                                         label="Brightness", command=self.update_brightness_img1)
         self.brightness_slider1.set(1.0)
         self.brightness_slider1.grid(row=5, column=0)
 
-        self.brightness_slider2 = tk.Scale(root, from_=0.1, to=20.0, resolution=0.1, orient=tk.HORIZONTAL,
+        self.brightness_slider2 = tk.Scale(root, from_=0.1, to=40.0, resolution=0.1, orient=tk.HORIZONTAL,
                                         label="Brightness", command=self.update_brightness_img2)
         self.brightness_slider2.set(1.0)
         self.brightness_slider2.grid(row=5, column=1)

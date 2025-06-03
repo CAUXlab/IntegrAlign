@@ -36,10 +36,10 @@ if __name__ == "__main__":
 
     # Process the task
     if args.task == "visualize":
-        visualization(args.scans, args.annotations, args.namesEmpty, args.namesArtefacts, args.namesAnalysisArea, args.panels, args.output)
+        visualization(args.scans, args.annotations, args.panels, args.output)
 
     elif args.task == "saveimgs":
-        save_downscaled_images(args.params, args.exclude, args.brightness)
+        save_downscaled_images(args.params, args.exclude, args.brightness, args.HALOrotation)
 
     elif args.task == "align":
         alignment(args.dwnscimg, args.tables, args.resolution, args.maxMS, args.metric, args.raster, args.alpha)

@@ -45,6 +45,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
     annotations_names_AnalysisArea = downscaled_images["params"].get("annotations_names_AnalysisArea")
     annotations_names_empty = downscaled_images["params"].get("annotations_names_empty")
     annotations_names_artefacts = downscaled_images["params"].get("annotations_names_artefacts")
+    HALO_rotation_path = downscaled_images["params"].get("HALO_rotation_path")
     panels_all = downscaled_images["params"].get("panels")
     output_path = downscaled_images["params"].get("output_path")
     ## Remove "params" from downscaled_images
@@ -94,7 +95,9 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
             # Get the file path corresponding to id
             csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
             ## Get the coordinates table and annotations
-            cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
+            scale_percent = metadata_images[name_alignment][f'scale_percent_{panel}']
+            image_shape = metadata_images[name_alignment][f'image_shape_{panel}']
+            cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordinates, data_frame_cells, resolution_micron, HALO_rotation_path, scale_percent, image_shape)
             if annotations_paths:
                 annotations = annotations_paths[index]
                 # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)

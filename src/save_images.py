@@ -29,7 +29,7 @@ import os
 import fnmatch
 
 
-def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
+def save_downscaled_images(params_file_path, excluded_ids, brightness_factor, HALO_rotation_path):
     ## Get the parameters for alignment
     scans_paths, annotations_paths, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea, common_ids, panels_all, output_path = get_parameters(params_file_path, excluded_ids)
     ## Get the name of the panels for each alignment (with reference panel at the end)
@@ -175,7 +175,7 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor):
             }
     root.destroy()
     # Add params
-    data_dict["params"] = {"annotations_paths":annotations_paths, "annotations_names_empty":annotations_names_empty, "annotations_names_artefacts":annotations_names_artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, "common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path}
+    data_dict["params"] = {"annotations_paths":annotations_paths, "annotations_names_empty":annotations_names_empty, "annotations_names_artefacts":annotations_names_artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, "HALO_rotation_path" : HALO_rotation_path, "common_ids" : common_ids, "panels" : panels_all, "output_path" : output_path}
     # Save the dictionary to a file
     with open(output_path + "downscaled_images.pkl", "wb") as file:
         pickle.dump(data_dict, file)

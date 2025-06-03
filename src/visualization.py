@@ -14,11 +14,12 @@ import json
 import numpy as np
 import scipy.ndimage
 from collections import Counter
+import geopandas as gpd
 
 
-from src.alignment import get_annotations, get_gdf
+from src.alignment import get_annotations, get_gdf, get_gdf_from_annot
 
-def visualization(scans_paths, annotations, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea, panels, output_path):
+def visualization(scans_paths, annotations, panels, output_path):
     """Generate a visualization report of all the slides for each patients."""
     ## Get the ids of every patients
     ids_panels = []
@@ -33,16 +34,56 @@ def visualization(scans_paths, annotations, annotations_names_empty, annotations
     sorted_common_ids = sorted(common_ids, key=lambda x: (x.isdigit(), int(x) if x.isdigit() else x))
     print(f"There is {len(sorted_common_ids)} patients that are common in every panel")
 
+    ## Get the correct annotations names 
+    print("Reading annotation files...")
+    if annotations:
+        all_annotation_names = set()
+        for annotations_panel in annotations:
+            files = [f for f in os.listdir(annotations_panel) if (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")]
+            for id in sorted_common_ids:
+                annotation_file_path = next(
+                    (os.path.join(annotations_panel, f) for f in files if id in f),
+                    None
+                )
+                annotation_names = get_annotation_classification_names(annotation_file_path)
+                all_annotation_names.update(annotation_names)
+
+        all_annotation_names = sorted(all_annotation_names)
+
+        print("\nFound the following unique annotation names:")
+        for idx, name in enumerate(all_annotation_names):
+            print(f"{idx + 1}: {name}")
+
+        # Prompt user to choose corresponding categories by index
+        analysis_area_indices = input("\nEnter numbers (comma-separated) for 'AnalysisArea' annotations: ")
+        artefact_area_indices = input("Enter numbers (comma-separated) for 'Artefacts' annotations: ")
+        empty_area_indices = input("Enter numbers (comma-separated) for 'Empty' annotations: ")
+
+        # Convert input to selected names
+        def get_selected_names(indices_str):
+            indices = [int(i.strip()) - 1 for i in indices_str.split(",") if i.strip().isdigit()]
+            return [all_annotation_names[i] for i in indices if 0 <= i < len(all_annotation_names)]
+
+        annotations_names_AnalysisArea = get_selected_names(analysis_area_indices)
+        annotations_names_Artefacts = get_selected_names(artefact_area_indices)
+        annotations_names_Empty = get_selected_names(empty_area_indices)
+
+        print("\n✅ Selected AnalysisArea names:", annotations_names_AnalysisArea)
+        print("✅ Selected Artefacts names:", annotations_names_Artefacts)
+        print("✅ Selected Empty names:", annotations_names_Empty)
+
+
+
     ## Save the report with the compressed images of every common ids
     figs = []
     for id in tqdm(sorted_common_ids, desc="Processing images", unit="ID"):
-        fig = plot_panels(scans_paths, annotations, id, panels, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)  # Generate figure
+        fig = plot_panels(scans_paths, annotations, id, panels, annotations_names_Empty, annotations_names_Artefacts, annotations_names_AnalysisArea)  # Generate figure
         figs.append(fig)
     save_html_report(figs, sorted_common_ids, output_path + "images_report.html")
 
     ## Save parameters for next steps
     dict_params = {"scans_paths":scans_paths, "annotations_paths":annotations, 
-                   "annotations_names_empty":annotations_names_empty, "annotations_names_artefacts":annotations_names_artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, 
+                   "annotations_names_empty":annotations_names_Empty, "annotations_names_artefacts":annotations_names_Artefacts, "annotations_names_AnalysisArea":annotations_names_AnalysisArea, 
                    "common_ids":sorted_common_ids, "panels":panels, "output_path":output_path}
     params_json = json.dumps(dict_params,indent=4)
     with open(output_path + "params.json","w") as outfile:
@@ -62,6 +103,46 @@ def find_ids(folder_path):
                 ids.append(match.group())
     
     return ids
+
+import xml.etree.ElementTree as ET
+
+def get_annotation_classification_names(annotation_file_path):
+    """
+    Parse an .annotations file and return all unique classification names.
+
+    Parameters:
+        annotation_file_path (str): Path to the .annotations XML file.
+
+    Returns:
+        List[str]: A list of unique classification names found in the file.
+    """
+    if annotation_file_path.endswith(".annotations"):
+        # Parse the XML file
+        tree = ET.parse(annotation_file_path)
+        root = tree.getroot()
+
+        # Convert XML to GeoDataFrame using external function
+        gdf = get_gdf_from_annot(root)
+
+    elif annotation_file_path.endswith(".geojson"):
+        ## Read annotations file
+        gdf = gpd.read_file(annotation_file_path)
+        def safe_json_load(x):
+            if isinstance(x, dict):  # If it's already a dictionary, return it as is
+                return x
+            elif isinstance(x, str):  # If it's a string, try to parse it as JSON
+                try:
+                    return json.loads(x)
+                except json.JSONDecodeError:
+                    return {}  # Return an empty dictionary for invalid rows
+            else:  # If it's neither, return an empty dictionary
+                return {}
+        gdf['classification'] = gdf['classification'].apply(safe_json_load)
+    else:
+        raise ValueError("File must have a .annotations extension")
+
+    # Extract and return unique classification names
+    return sorted(set(name for name in gdf['classification'].dropna()))
 
 
 def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea):
@@ -90,6 +171,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_em
                 if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
                 None
             )
+
             artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
 
             analysis_area_gdf_poly = analysis_area_alignment[panel]

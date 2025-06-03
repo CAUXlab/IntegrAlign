@@ -34,6 +34,7 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
     annotations_names_AnalysisArea = downscaled_images["params"].get("annotations_names_AnalysisArea")
     annotations_names_empty = downscaled_images["params"].get("annotations_names_empty")
     annotations_names_artefacts = downscaled_images["params"].get("annotations_names_artefacts")
+    HALO_rotation_path = downscaled_images["params"].get("HALO_rotation_path")
     common_ids = downscaled_images["params"].get("common_ids")
     panels_all = downscaled_images["params"].get("panels")
     # print(panels_all)
@@ -84,6 +85,7 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
             (outTx_Bspline_dict, simg2_dict, execution_time_dict, 
              metric_values_dict, outTx_Rigid, simg1_Rigid, 
              simg2_Rigid, nda_Rigid) = alignment_2panels(name_alignment, id, img1, img2, number_ms, metric, spline_order)
+
             ## Load coordinate table and annotations of each panel
             print(f'Loading tables and annotations...')
             for panel in panels_alignment:
@@ -93,7 +95,10 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
                 # Get the file path corresponding to id
                 csv_file_path = next((os.path.join(coordinate_table, f) for f in os.listdir(coordinate_table) if id in f and f.endswith(".csv") and not f.startswith(".")), None)
                 ## Get the coordinates table
-                cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron)
+                scale_percent = metadata_images[name_alignment][f'scale_percent_{panel}']
+                image_shape = metadata_images[name_alignment][f'image_shape_{panel}']
+                cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordinates, data_frame_cells, resolution_micron, HALO_rotation_path, scale_percent, image_shape)
+
                 ## Get the annotations if given
                 if annotations_paths:
                     annotations = annotations_paths[index]
@@ -136,13 +141,6 @@ def alignment(downscaled_images_path, coordinate_tables, resolution_micron, numb
         save_tables(merged_cell_coordinates, output_path, id)
         ## Plot cell coordinates before and after alignment
         plot_rasters(data_frame_cells, merged_cell_coordinates, cell_coordinates, pixel_size_raster_micron, output_path, panels_all, id, resolution_micron)
-
-
-
-
-
-
-
 
 
 
@@ -356,117 +354,134 @@ def imageRegBspline(fixed,moving,transformDomainMeshSize,spline_order,metric):
     return cimg, simg1, simg2, outTx
 
 
-def get_cells_coordinates_SPIAT_CellType(csv_file_path, panel, cell_coordinates, data_frame_cells, resolution_micron):
+def get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordinates, data_frame_cells, resolution_micron, HALO_rotation_path, scale_percent, image_shape):
     df = pd.read_csv(csv_file_path)
-    
-    new_df = pd.DataFrame()
+    new_df = df.copy()
 
-    required_columns = ['Phenotype', 'Classifier.Label', 'Object.Id', 'x', 'y']
-
-    required_columns_SPIAT = [
-    'x', 'y', 'Phenotype', 'Cell_type', 'ID', 'Tissue_Category',
-    'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel' 
-    ]
-
-    required_columns_ROI = ['x_', 'y_', 'x', 'y']
-
-    required_columns_HALO = ['XMin', 'XMax', 'YMin', 'YMax']
-
-    # Check if it is a table from SPIAT with cell types or not
-    if all(col in df.columns for col in required_columns):
-        # Store the coordinates in the new DataFrame
-        ## Convert micrometers coordinates to pixel
-        
-        '''
-        new_df['x'] = (df['XMin'] + df['XMax'])/2
-        new_df['y'] = (df['YMin'] + df['YMax'])/2
-        '''
-
+    required_columns_HALO = {'XMin', 'XMax', 'YMin', 'YMax'} 
+    if required_columns_HALO.issubset(df.columns):
+        new_df['x'] = (df['XMin'] + df['XMax']) / 2
+        new_df['y'] = (df['YMin'] + df['YMax']) / 2
+    elif {'x', 'y'}.issubset(df.columns):
         new_df['x'] = df['x']
         new_df['y'] = df['y']
-
-        new_df['x (micron)'] = new_df['x'] / resolution_micron
-        new_df['y (micron)'] = new_df['y'] / resolution_micron
-            
-        # new_df['x'] = ((df['XMin_pixel'] + df['XMax_pixel']) / 2)
-        # new_df['y'] = ((df['YMin_pixel'] + df['YMax_pixel']) / 2)
-        
-        new_df['Phenotype'] = df['Phenotype']
-        new_df['Object.Id'] = df['Object.Id']
-        new_df['Classifier.Label'] = df['Classifier.Label']
-
-        '''
-        print(f"\nTotal number of cells: {len(new_df)}")
-        print("--")
-        cell_type_counts = df['Cell_type'].value_counts()
-        for cell_type, count in cell_type_counts.items():
-            print(f"{cell_type}: {count} cells")
-            # cell_coordinates[f'{panel}_panel_{cell_type}'] = new_df[new_df['Cell_type'] == cell_type][['x', 'y']].to_numpy()
-        '''
-        
-        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
-        data_frame_cells[f'{panel}_panel_df'] = new_df
-
-    # Check if it is a table from SPIAT with cell types or not
-    elif all(col in df.columns for col in required_columns_SPIAT):
-        # Store the coordinates in the new DataFrame
-        ## Convert micrometers coordinates to pixel
-        new_df['x (micron)'] = df['x']
-        new_df['y (micron)'] = df['y']
-
-        new_df['x'] = df['x'] * resolution_micron
-        new_df['y'] = df['y'] * resolution_micron
-            
-        # new_df['x'] = ((df['XMin_pixel'] + df['XMax_pixel']) / 2)
-        # new_df['y'] = ((df['YMin_pixel'] + df['YMax_pixel']) / 2)
-        
-        new_df['Phenotype'] = df['Phenotype']
-        new_df['Cell_type'] = df['Cell_type']
-        new_df['Object Id'] = df['ID']
-        new_df['Classifier Label'] = df['Tissue_Category']
-
-        '''
-        print(f"\nTotal number of cells: {len(new_df)}")
-        print("--")
-        cell_type_counts = df['Cell_type'].value_counts()
-        for cell_type, count in cell_type_counts.items():
-            print(f"{cell_type}: {count} cells")
-            # cell_coordinates[f'{panel}_panel_{cell_type}'] = new_df[new_df['Cell_type'] == cell_type][['x', 'y']].to_numpy()
-        '''
-        
-        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
-        data_frame_cells[f'{panel}_panel_df'] = new_df
-
-    # Check if all required ROI columns are present in the DataFrame
-    elif all(col in df.columns for col in required_columns_ROI):
-        new_df = df.copy()
-
-        new_df['x (micron)'] = df['x_']
-        new_df['y (micron)'] = df['y_']
-
-
-        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
-        data_frame_cells[f'{panel}_panel_df'] = new_df
-
-    # Check if all required HALO columns are present in the DataFrame
-    elif all(col in df.columns for col in required_columns_HALO):
-        new_df = df.copy()
-
-        new_df['x'] = (df['XMin'] + df['XMax'])/2
-        new_df['y'] = (df['YMin'] + df['YMax'])/2
-
-        new_df['x (micron)'] = new_df['x'] / resolution_micron
-        new_df['y (micron)'] = new_df['y'] / resolution_micron
-
-        cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
-        data_frame_cells[f'{panel}_panel_df'] = new_df
-
     else:
-        raise ValueError("The tables are not in the correct format.\n Required columns : ['Phenotype', 'Classifier.Label', 'Object.Id', 'x', 'y'] or simply ['XMin', 'XMax', 'YMin', 'YMax']")
+        raise ValueError(
+            "The tables are not in the correct format.\n"
+            "Required columns: ['x', 'y'] OR ['XMin', 'XMax', 'YMin', 'YMax']"
+        )
+
+    if HALO_rotation_path:
+        rotation = HALO_rotation(HALO_rotation_path, id, panel)
+        if rotation != 0:
+            print(f"Applying inverse rotation of {rotation}° from HALO to coordinates for adjustment to the image to align.")
+        xy_array = new_df[['x', 'y']].to_numpy()
+        xy_corrected = reverse_rotation_with_offset(xy_array, 
+                                                    angle_deg=-rotation, 
+                                                    scale_percent=scale_percent, 
+                                                    img_shape=image_shape)
+        new_df[['x', 'y']] = xy_corrected
+
+
+    new_df['x (micron)'] = new_df['x'] / resolution_micron
+    new_df['y (micron)'] = new_df['y'] / resolution_micron
+
+    cell_coordinates[f'{panel}_panel_DAPI'] = new_df[['x', 'y']].to_numpy()
+    data_frame_cells[f'{panel}_panel_df'] = new_df
+
 
 
     return cell_coordinates, data_frame_cells
 
+def HALO_rotation(file_path, id, panel):
+    """
+    Reads an Excel file and replaces empty or missing values in the 'Rotation' column with 0.
+    
+    Args:
+        file_path (str): Path to the Excel file.
+        
+    Returns:
+        pd.DataFrame: Cleaned DataFrame.
+    """
+    # Read the Excel file
+    HALO_rotation_df = pd.read_excel(file_path, engine='openpyxl')
+
+    # Replace NaN and blank strings in 'Rotation' with 0
+    HALO_rotation_df['Rotation'] = HALO_rotation_df['Rotation'].fillna(0)  # Fill NaN
+    HALO_rotation_df['Rotation'] = HALO_rotation_df['Rotation'].replace(r'^\s*$', 0, regex=True)  # Fill empty strings
+
+    # Ensure the 'Rotation' column is numeric (as int)
+    HALO_rotation_df['Rotation'] = pd.to_numeric(HALO_rotation_df['Rotation'], errors='coerce').fillna(0).astype(int)
+
+    ## Get corresponding rotation value
+    id_col = [col for col in HALO_rotation_df.columns if 'ID_patient' in col][0]
+    panel_col = [col for col in HALO_rotation_df.columns if 'Panel' in col][0]
+    rotation_col = [col for col in HALO_rotation_df.columns if 'Rotation' in col][0]
+    # Filter rows where column values CONTAIN the given substrings
+    match = HALO_rotation_df[
+        HALO_rotation_df[id_col].astype(str).str.contains(id, na=False) &
+        HALO_rotation_df[panel_col].astype(str).str.contains(panel, na=False)
+    ]
+    # Get the Rotation value
+    rotation = match[rotation_col].values[0] if not match.empty else None
+
+    return rotation
+
+
+import math
+
+def compute_rotation_offset(w, h, theta_deg):
+    theta = math.radians(theta_deg)
+
+    # New dimensions after rotation with expand=True
+    new_w = abs(w * math.cos(theta)) + abs(h * math.sin(theta))
+    new_h = abs(w * math.sin(theta)) + abs(h * math.cos(theta))
+
+    # Centers
+    orig_cx, orig_cy = w / 2, h / 2
+    new_cx, new_cy = new_w / 2, new_h / 2
+
+    # Offset from original center to new center
+    offset_x = orig_cx - new_cx
+    offset_y = orig_cy - new_cy
+
+    return offset_x, offset_y, new_w, new_h
+    
+def reverse_rotation_with_offset(xy, angle_deg, scale_percent, img_shape):
+    """
+    Rotate coordinates back by reversing the applied rotation with an offset.
+    
+    Parameters:
+        xy: (n, 2) array, coordinates in scaled space
+        angle_deg: angle to reverse rotation (in degrees)
+        scale_percent: scaling factor applied due to resizing
+        img_shape: (height, width) of the image
+        
+    Returns:
+        Corrected coordinates in the original image space
+    """
+    # Step 1: Apply scale factor to bring coordinates back to original resolution
+    xy_rescaled = xy * scale_percent
+    
+    # Step 2: Compute the offset and new size due to the expand=True rotation
+    h, w = img_shape
+    offset_x, offset_y, _, _ = compute_rotation_offset(w, h, theta_deg=angle_deg)
+    
+    # Step 3: Adjust coordinates with offset
+    xy_rescaled[:, 0] += offset_x
+    xy_rescaled[:, 1] += offset_y
+    
+    # Step 4: Reverse the rotation around the original image center
+    center_orig = np.array([w / 2, h / 2])
+    angle_rad = np.radians(-angle_deg)
+    R = np.array([
+        [np.cos(angle_rad), -np.sin(angle_rad)],
+        [np.sin(angle_rad),  np.cos(angle_rad)]
+    ])
+    xy_rotated = (R @ (xy_rescaled - center_orig).T).T + center_orig
+    xy_final = xy_rotated / scale_percent
+    
+    return xy_final
 
 def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_Empty, annotations_names_Artefacts, annotations_names_AnalysisArea):
     if annotation_file_path.endswith(".annotations"):
@@ -1232,6 +1247,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     ax.invert_yaxis()
     plt.show()
     '''
+
     ## Filter out empty GeoSeries
     analysis_area_alignment_list = [g for g in analysis_area_alignment_list if not g.empty]
     artefacts_empty_alignment_list = [g for g in artefacts_empty_alignment_list if not g.empty]
@@ -1258,6 +1274,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     plt.show()
     '''
 
+
     ## Merge the remaining GeoSeries
     merged_polygons = gpd.GeoSeries(unary_union([g.unary_union for g in artefacts_empty_alignment_list]))
     '''
@@ -1267,6 +1284,7 @@ def merge_annotations(id, artefacts_empty_alignment, analysis_area_alignment, ou
     ax.invert_yaxis()
     plt.show()
     '''
+
 
     # Create a Polygon representing the outer boundary
     outer_boundary = intersections_polygons.unary_union
@@ -1549,36 +1567,14 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     # Original DataFrame
     df_cells = data_frame_cells[f'{panels_alignment[0]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
-    required_columns = ['Phenotype', 'Object.Id', 'Classifier.Label']
-    required_columns_SPIAT = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
-    required_columns_ROI = ['x_', 'y_', 'x', 'y']
-    required_columns_HALO = ['XMin', 'XMax', 'YMin', 'YMax']
-    
-    # Check if all required columns are present in df
-    if all(col in df_cells.columns for col in required_columns):
-        filtered_df = df_cells.loc[filtered_ids, ['Phenotype', 'Object.Id', 'Classifier.Label']].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Phenotype', 'Classifier.Label', 'Object.Id']]
-
-    elif all(col in df_cells.columns for col in required_columns_SPIAT):
-        filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
-
-    elif all(col in df_cells.columns for col in required_columns_ROI):
-        # Get all columns in df_cells except for 'x' and 'y'
-        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
-        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
-
-    elif all(col in df_cells.columns for col in required_columns_HALO):
-        # Get all columns in df_cells except for 'x' and 'y'
-        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'XMin', 'XMax', 'YMin', 'YMax']]
-        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
+    # Get all columns in df_cells except for 'x' and 'y'
+    columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
+    filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
+    filtered_df[['x', 'y']] = filtered_coords_tr
+    filtered_df[['x (micron)', 'y (micron)']] = filtered_coords_tr / resolution_micron
     filtered_df['Panel'] = panels_alignment[0]
+    filtered_df = filtered_df[['Panel', 'x (micron)', 'y (micron)', 'x', 'y'] + columns_without_xy]
+
     merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
 
     
@@ -1621,37 +1617,14 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     # Original DataFrame
     df_cells = data_frame_cells[f'{panels_alignment[1]}_panel_df']
     # Filter the DataFrame by `filtered_ids`
-    required_columns = ['Phenotype', 'Object.Id', 'Classifier.Label']
-    required_columns_SPIAT = ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']
-    required_columns_ROI = ['x_', 'y_', 'x', 'y']
-    required_columns_HALO = ['XMin', 'XMax', 'YMin', 'YMax']
-
-    # Check if all required columns are present in df
-    if all(col in df_cells.columns for col in required_columns):
-        filtered_df = df_cells.loc[filtered_ids, ['Phenotype', 'Object.Id', 'Classifier.Label']].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Phenotype', 'Classifier.Label', 'Object.Id']]
-
-    elif all(col in df_cells.columns for col in required_columns_SPIAT):
-        filtered_df = df_cells.loc[filtered_ids, ['Cell_type', 'Phenotype', 'Object Id', 'Classifier Label']].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)', 'Cell_type', 'Phenotype', 'Classifier Label', 'Object Id']]
-
-    elif all(col in df_cells.columns for col in required_columns_ROI):
-        # Get all columns in df_cells except for 'x' and 'y'
-        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
-        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
-
-    elif all(col in df_cells.columns for col in required_columns_HALO):
-        # Get all columns in df_cells except for 'x' and 'y'
-        columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'XMin', 'XMax', 'YMin', 'YMax']]
-        filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
-        filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
-        filtered_df = filtered_df[['x (micron)', 'y (micron)'] + columns_without_xy]
-
+    # Get all columns in df_cells except for 'x' and 'y'
+    columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
+    filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
+    filtered_df[['x', 'y']] = filtered_coords / resolution_micron
+    filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
     filtered_df['Panel'] = panels_alignment[1]
+    filtered_df = filtered_df[['Panel', 'x (micron)', 'y (micron)', 'x', 'y'] + columns_without_xy]
+
     merged_cell_coordinates = pd.concat([merged_cell_coordinates.loc[:,~merged_cell_coordinates.columns.duplicated()].reset_index(drop=True), filtered_df.loc[:,~filtered_df.columns.duplicated()].reset_index(drop=True)], ignore_index=True)
     # merged_cell_coordinates = pd.concat([merged_cell_coordinates, filtered_df], ignore_index=True)
 
@@ -1660,14 +1633,14 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
 
 def save_tables(merged_cell_coordinates, output_path, id):
     if 'Cell_type' in merged_cell_coordinates.columns:
-        merged_cell_coordinates["label"] = merged_cell_coordinates.index
-        merged_cell_coordinates.rename(columns={"Classifier Label": "Classifier_Label"}, inplace=True)
+        # merged_cell_coordinates["label"] = merged_cell_coordinates.index
+        # merged_cell_coordinates.rename(columns={"Classifier Label": "Classifier_Label"}, inplace=True)
         # merged_cell_coordinates.drop(columns=["Object Id"], inplace=True)
         print("Combined phenotypes:")
         print(np.unique(merged_cell_coordinates['Cell_type']))
     # put panel after transformed coordinates for readability with HALO files
-    panel = merged_cell_coordinates.pop('Panel')
-    merged_cell_coordinates.insert(2, 'Panel', panel)
+    # panel = merged_cell_coordinates.pop('Panel')
+    # merged_cell_coordinates.insert(2, 'Panel', panel)
 
     merged_cell_coordinates.to_csv(output_path + f"Alignment/merged_tables/{id}_merged_cell_coordinates.csv", index=False)
 
