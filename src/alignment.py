@@ -501,6 +501,14 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
                     annotations_names_Empty_Artefacts = annotations_names_Empty + annotations_names_Artefacts
                     gdf = get_gdf_from_annot(root)
                     artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_Empty_Artefacts))]
+                    
+                    fig, ax = plt.subplots(figsize=(6, 6)) 
+                    artefacts_empty_gdf.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
+                    ax.set_title(f"Artefacts_empty {panel}")
+                    ax.axis('off')
+                    ax.invert_yaxis()
+                    plt.show()
+
                     if artefacts_empty_gdf["geometry"].is_empty.all():
                         print(f"No annotations named {annotations_names_Empty_Artefacts}")
                     else:

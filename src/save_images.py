@@ -323,7 +323,7 @@ def load_downscaled_imgs(folder_path1, folder_path2, id):
     scale_percent2 = sizeY_compressed2/sizeY_fullres2
 
     img1_resize, scale_percent1, img2_resize, scale_percent2 = get_same_compression(id, path1, img1_resize, scale_percent1, sizeY_fullres1, path2, img2_resize, scale_percent2, sizeY_fullres2)
-    
+    print(img1_resize.shape, img2_resize.shape)
 
     # Scale images to 8bit
     img1_8bit = cv2.convertScaleAbs(img1_resize)
