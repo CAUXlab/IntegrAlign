@@ -423,12 +423,8 @@ def HALO_rotation(file_path, id, panel):
         HALO_rotation_df[id_col].astype(str).str.contains(id, na=False) &
         (HALO_rotation_df[panel_col] == str(panel).strip())
     ]
-    print(match[id_col])
-    print(match[panel_col])
-    print(match[rotation_col])
     # Get the Rotation value
     rotation = match[rotation_col].values[0] if not match.empty else None
-    print(rotation)
 
     return rotation
 
