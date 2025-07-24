@@ -372,6 +372,7 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordina
         )
 
     if HALO_rotation_path:
+        print(panel)
         rotation = HALO_rotation(HALO_rotation_path, id, panel)
         if rotation != 0:
             print(f"Applying inverse rotation of {rotation}° from HALO to coordinates for adjustment to the image to align.")
@@ -420,10 +421,14 @@ def HALO_rotation(file_path, id, panel):
     # Filter rows where column values CONTAIN the given substrings
     match = HALO_rotation_df[
         HALO_rotation_df[id_col].astype(str).str.contains(id, na=False) &
-        HALO_rotation_df[panel_col].astype(str).str.contains(panel, na=False)
+        (HALO_rotation_df[panel_col] == str(panel).strip())
     ]
+    print(match[id_col])
+    print(match[panel_col])
+    print(match[rotation_col])
     # Get the Rotation value
     rotation = match[rotation_col].values[0] if not match.empty else None
+    print(rotation)
 
     return rotation
 
@@ -502,12 +507,14 @@ def get_annotations(annotation_file_path, panel, artefacts_empty_alignment, anal
                     gdf = get_gdf_from_annot(root)
                     artefacts_empty_gdf = gdf[gdf['classification'].apply(lambda x: any(item.lower() in x.lower() for item in annotations_names_Empty_Artefacts))]
                     
+                    '''
                     fig, ax = plt.subplots(figsize=(6, 6)) 
                     artefacts_empty_gdf.plot(ax=ax, color='blue', alpha=0.5, aspect='equal')
                     ax.set_title(f"Artefacts_empty {panel}")
                     ax.axis('off')
                     ax.invert_yaxis()
                     plt.show()
+                    '''
 
                     if artefacts_empty_gdf["geometry"].is_empty.all():
                         print(f"No annotations named {annotations_names_Empty_Artefacts}")
