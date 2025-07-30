@@ -302,8 +302,8 @@ def panels_name_alignment(panels, folder_paths):
 
 def load_downscaled_imgs(folder_path1, folder_path2, id):
     # Define path of the qptiff or tiff
-    path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
-    path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
+    path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if not f.startswith('.') and (fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif"))])
+    path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if not f.startswith('.') and (fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif"))])
 
     #path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
     #path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"

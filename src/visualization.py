@@ -71,6 +71,11 @@ def visualization(scans_paths, annotations, panels, output_path):
         print("\n✅ Selected AnalysisArea names:", annotations_names_AnalysisArea)
         print("✅ Selected Artefacts names:", annotations_names_Artefacts)
         print("✅ Selected Empty names:", annotations_names_Empty)
+    else:
+        annotations_names_Empty = []
+        annotations_names_Artefacts = []
+        annotations_names_AnalysisArea = []
+    
 
 
 
@@ -127,17 +132,19 @@ def get_annotation_classification_names(annotation_file_path):
     elif annotation_file_path.endswith(".geojson"):
         ## Read annotations file
         gdf = gpd.read_file(annotation_file_path)
-        def safe_json_load(x):
-            if isinstance(x, dict):  # If it's already a dictionary, return it as is
-                return x
-            elif isinstance(x, str):  # If it's a string, try to parse it as JSON
+        def extract_name(val):
+            if isinstance(val, dict):
+                return val.get("name")
+            elif isinstance(val, str):
                 try:
-                    return json.loads(x)
-                except json.JSONDecodeError:
-                    return {}  # Return an empty dictionary for invalid rows
-            else:  # If it's neither, return an empty dictionary
-                return {}
-        gdf['classification'] = gdf['classification'].apply(safe_json_load)
+                    import json
+                    data = json.loads(val)
+                    return data.get("name")
+                except Exception:
+                    return None
+            else:
+                return None
+        gdf['classification'] = gdf['classification'].apply(extract_name)
     else:
         raise ValueError("File must have a .annotations extension")
 
@@ -154,7 +161,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_em
         ## Get all compressed images and annotations
         for scan, annotations, panel in zip(scans_paths, annotations_paths, panels):
             # Define scan path
-            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(('.tif', '.qptiff'))), None)
+            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(('.tif', '.qptiff')) and not f.startswith('.')), None)
             # print(f"{panel}:", path)
             # Load image
             img_resized, scale_percent = load_compressed_img(path)
@@ -162,37 +169,39 @@ def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_em
             img_resized = cv2.convertScaleAbs(img_resized)
             imgs_resized.append(img_resized)
 
-            # Get annotations
-            artefacts_empty_alignment = {}
-            analysis_area_alignment = {}
-            # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
-            annotation_file_path = next(
-                (os.path.join(annotations, f) for f in os.listdir(annotations) 
-                if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
-                None
-            )
+            if annotations_paths:
+                # Get annotations
+                artefacts_empty_alignment = {}
+                analysis_area_alignment = {}
+                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
+                annotation_file_path = next(
+                    (os.path.join(annotations, f) for f in os.listdir(annotations) 
+                    if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
+                    None
+                )
 
-            artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
+                artefacts_empty_alignment, analysis_area_alignment = get_annotations(annotation_file_path, panel, artefacts_empty_alignment, analysis_area_alignment, annotations_names_empty, annotations_names_artefacts, annotations_names_AnalysisArea)
 
-            analysis_area_gdf_poly = analysis_area_alignment[panel]
-            analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, crop_coords = (0, 0), image_shape = img_resized.shape, img_resize = img_resized)
-            annotations_resized.append([area * scale_percent for area in analysis_area_array])
+                analysis_area_gdf_poly = analysis_area_alignment[panel]
+                analysis_area_array = get_gdf(analysis_area_gdf_poly, scale_percent, crop_coords = (0, 0), image_shape = img_resized.shape, img_resize = img_resized)
+                annotations_resized.append([area * scale_percent for area in analysis_area_array])
         ## Plot the compressed images
         fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
         for i, (img_resized, panel, annotations) in enumerate(zip(imgs_resized, panels, annotations_resized)):
             axes[i].imshow(img_resized, cmap="gray")  # Display the image
             axes[i].set_title(panel, fontsize=6)  # Set panel title
             axes[i].axis('off')  # Turn off axes
-            # Plot the annotations
-            for annotation_array in annotations:
-                axes[i].plot(annotation_array[:, 0], annotation_array[:, 1], color='red', linewidth=0.5)
+            if annotations_paths:
+                # Plot the annotations
+                for annotation_array in annotations:
+                    axes[i].plot(annotation_array[:, 0], annotation_array[:, 1], color='red', linewidth=0.5)
         plt.tight_layout()
         plt.close(fig)
     else:
         ## Get all compressed images
         for scan, panel in zip(scans_paths, panels):
             # Define scan path
-            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(".qptiff")), None)
+            path = next((os.path.join(scan, f) for f in os.listdir(scan) if id in f and f.endswith(('.tif', '.qptiff')) and not f.startswith('.')), None)
             # print(f"{panel}:", path)
             # Load image
             img_resized, scale_percent = load_compressed_img(path)
@@ -243,6 +252,7 @@ def save_html_report(figs, ids, output_html="report.html"):
 
 def load_compressed_img(path_scan):
     if path_scan.endswith('.qptiff'):
+        print(path_scan)
         tif = TiffFile(path_scan)
     
         ## Load the most compressed DAPI image in .pages

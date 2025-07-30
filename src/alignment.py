@@ -368,7 +368,7 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordina
     else:
         raise ValueError(
             "The tables are not in the correct format.\n"
-            "Required columns: ['x', 'y'] OR ['XMin', 'XMax', 'YMin', 'YMax']"
+            "Required columns: ['x', 'y'] in pixels OR ['XMin', 'XMax', 'YMin', 'YMax'] in pixels"
         )
 
     if HALO_rotation_path:
@@ -382,7 +382,6 @@ def get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordina
                                                     scale_percent=scale_percent, 
                                                     img_shape=image_shape)
         new_df[['x', 'y']] = xy_corrected
-
 
     new_df['x (micron)'] = new_df['x'] / resolution_micron
     new_df['y (micron)'] = new_df['y'] / resolution_micron
@@ -1509,7 +1508,7 @@ def scale_multipolygon_coordinates(multipolygon, resolution_um):
     return MultiPolygon(scaled_polygons)
 
 
-def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_cells, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, mask, resolution_micron, merged_cell_coordinates):
+def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_cells, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, mask, resolution_micron, merged_cell_coordinates, inner_boundary = None):
     print("----------------------")
     print(panels_alignment[0])
     scale_percent1 = metadata_images[name_alignment][f'scale_percent_{panels_alignment[0]}']
@@ -1552,6 +1551,12 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     if mask == "No_annotations":
         filtered_coords_tr = coords_tr
         filtered_ids = ids
+    elif mask == "inner_boundary":
+        # Exclude points that are inside the inner_boundary (shapes defined in the mirrored cursor validation)
+        inside_mask = shapely.vectorized.contains(inner_boundary, coords_tr[:, 0], coords_tr[:, 1])
+        outside_mask = ~inside_mask  # negate the boolean mask because we want to keep points that are outside the inner_boundary
+        filtered_coords_tr = coords_tr[outside_mask]
+        filtered_ids = ids[outside_mask]
     else:
         # Create boolean mask indicating which points are inside any polygon in the mask
         mask_contains = shapely.vectorized.contains(mask, coords_tr[:, 0], coords_tr[:, 1])
@@ -1592,7 +1597,7 @@ def transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_c
     return merged_cell_coordinates
 
 
-def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates):
+def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates, inner_boundary = None):
     print("----------------------")
     print(panels_alignment[1])
     coords = cell_coordinates[f'{panels_alignment[1]}_panel_DAPI']
@@ -1603,6 +1608,12 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     if mask == "No_annotations":
         filtered_coords = coords
         filtered_ids = ids
+    elif mask == "inner_boundary":
+        # Exclude points that are inside the inner_boundary (shapes defined in the mirrored cursor validation)
+        inside_mask = shapely.vectorized.contains(inner_boundary, coords[:, 0], coords[:, 1])
+        outside_mask = ~inside_mask  # negate the boolean mask because we want to keep points that are outside the inner_boundary
+        filtered_coords = coords[outside_mask]
+        filtered_ids = ids[outside_mask]
     else:
         # Create boolean mask indicating which points are inside any polygon in the mask
         mask_contains = shapely.vectorized.contains(mask, coords[:, 0], coords[:, 1])
@@ -1631,7 +1642,7 @@ def filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cell
     # Get all columns in df_cells except for 'x' and 'y'
     columns_without_xy = [col for col in df_cells.columns if col not in ['x', 'y', 'x (micron)', 'y (micron)', 'XMin_pixel', 'XMax_pixel', 'YMin_pixel', 'YMax_pixel']]
     filtered_df = df_cells.loc[filtered_ids, columns_without_xy].copy()
-    filtered_df[['x', 'y']] = filtered_coords / resolution_micron
+    filtered_df[['x', 'y']] = filtered_coords
     filtered_df[['x (micron)', 'y (micron)']] = filtered_coords / resolution_micron
     filtered_df['Panel'] = panels_alignment[1]
     filtered_df = filtered_df[['Panel', 'x (micron)', 'y (micron)', 'x', 'y'] + columns_without_xy]

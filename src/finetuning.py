@@ -138,15 +138,32 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
         if visualization != "0":
             mask = merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron)
     else:
-        mask = "No_annotations"
+        if manual_empty_alignment:
+            panels_tr = [key for key in manual_empty_alignment.keys() if "in" in key]
+            manual_empty_alignment_list = []
+            for panel in panels_tr:
+                manual_empty_alignment_list.append(manual_empty_alignment[panel].apply(lambda geom: geom if geom.is_valid else geom.buffer(0)))
+
+            ## Filter out empty GeoSeries
+            manual_empty_alignment_list = [g for g in manual_empty_alignment_list if not g.empty]
+            ## Merge the remaining GeoSeries
+            merged_polygons = gpd.GeoSeries(unary_union([g.unary_union for g in manual_empty_alignment_list]))
+
+            # Create a Polygon representing the inner boundary
+            inner_boundary = merged_polygons.unary_union
+            mask = "inner_boundary"
+            print(mask)
+            
+        else:
+            mask = "No_annotations"
 
     ## Transform and filter coordinates
     print("Transform, filer and merge coordinates...")
     merged_cell_coordinates = pd.DataFrame()
     for name_alignment in downscaled_images_id.keys():
         panels_alignment = name_alignment.split("_")
-        merged_cell_coordinates = transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_cells, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, mask, resolution_micron, merged_cell_coordinates)
-    merged_cell_coordinates = filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates)
+        merged_cell_coordinates = transform_filter_coordinates(metadata_images, cell_coordinates, data_frame_cells, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, mask, resolution_micron, merged_cell_coordinates, inner_boundary)
+    merged_cell_coordinates = filter_coordinates(cell_coordinates, panels_alignment, mask, data_frame_cells, resolution_micron, merged_cell_coordinates, inner_boundary)
     ## Save new coordinates table
     save_tables(merged_cell_coordinates, output_path, id)
     ## Plot cell coordinates before and after alignment
@@ -383,8 +400,8 @@ def get_channel_names_from_indica_xml(file: Path) -> list[str]:
 
 def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     # Define path of the qptiff or tiff
-    path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
-    path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif")])
+    path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if not f.startswith('.') and (fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif"))])
+    path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if not f.startswith('.') and (fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif"))])
 
     #path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
     #path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
