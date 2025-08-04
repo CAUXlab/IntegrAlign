@@ -127,7 +127,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
     if response in ['no', 'n']:
         print("Exiting the script without rewriting the annotations file.")
         sys.exit()  # Exit the script immediately
-
+    inner_boundary = None
     if annotations_paths:
         ## Transform and merge the annotations
         print("-----")
@@ -370,7 +370,7 @@ def load_TIF_high_res(path_scan):
     root = ElementTree.fromstring(xml.replace("\n", "").replace("\t", ""))
     sizeY = list(dict.fromkeys([x.get("sizeY") for x in root.iter() if x.tag == "dimension"]))
     # Load the second compressed image channels in .levels
-    img_data = tif.series[0].levels[-2].asarray()
+    img_data = tif.series[0].levels[2].asarray()
     sizeY_fullres = int(sizeY[0])
     sizeY_compressed = int(sizeY[2])
     channels = [
@@ -970,7 +970,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
     if 'Shapes' in viewer1.layers:
         polygons = []
         for polygon in viewer1.layers['Shapes'].data:
-            polygon_sitk = transform_polygon_to_sitk(polygon)
+            polygon_sitk = transform_polygon_to_sitk(polygon, img1_data_offset, manual_alignment_rotation, img1_data_shape)
             polygons.append(Polygon(polygon_sitk))
         manual_empty_geometries = gpd.GeoSeries(polygons)
 
@@ -985,18 +985,26 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
 
 # Functions that convert coordinates between napari and sitk systems
 ## reference point (origin) is not the same in both systems
-def transform_polygon_to_sitk(polygon):
+def transform_polygon_to_sitk(polygon,img1_data_offset, manual_alignment_rotation, img1_data_shape):
     try:
         polygon1_sitk = []
         for points1_napari in polygon:
             # Transform to the coordinate system of sitk
             points1_sitk = [points1_napari[1], points1_napari[0]]
+
+            ## Transform back the cursor to the coordinate system of the original img1_data (not rotated)
+            # Step 1: subtract offset (shift back from new center to old center)
+            points1_sitk += img1_data_offset[::-1]  # Reverse (dy, dx) → (dx, dy)
+            # Step 2: rotate in the opposite direction to undo rotation
+            points1_sitk = rotate_coordinates_angle(points1_sitk, manual_alignment_rotation, img1_data_shape)
+
             polygon1_sitk.append(points1_sitk)
 
         return np.array(polygon1_sitk)
 
     except Exception as e:
         print(f"An error occurred: {e}")
+
 
 
 

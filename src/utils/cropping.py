@@ -235,7 +235,6 @@ class ImageCropperApp:
             # Clip values to stay within [0, 255]
             brightened_cropped_img1 = np.clip(brightened_cropped_img1, 0, 255).astype(np.float32)
 
-
             # Store both the cropped image and the crop coordinates
             self.cropped_images[self.panels[0]] = (brightened_cropped_img1, (orig_x1, orig_y1))
 
@@ -284,18 +283,18 @@ class ImageCropperApp:
         self.saved = True
 
     def close_window(self):
+        if not self.saved:
+            cropped_img1 = self.img1_8bit
+            mean_val = cropped_img1.mean()
+            brightened_cropped_img1 = cropped_img1 * self.brightness_factor1 + (1 - self.brightness_factor1) * mean_val
+            brightened_cropped_img1 = np.clip(brightened_cropped_img1, 0, 255).astype(np.float32)
+            self.cropped_images[self.panels[0]] = (brightened_cropped_img1, (0, 0))
 
-        cropped_img1 = self.img1_8bit
-        mean_val = cropped_img1.mean()
-        brightened_cropped_img1 = cropped_img1 * self.brightness_factor1 + (1 - self.brightness_factor1) * mean_val
-        brightened_cropped_img1 = np.clip(brightened_cropped_img1, 0, 255).astype(np.float32)
-        self.cropped_images[self.panels[0]] = (brightened_cropped_img1, (0, 0))
-
-        cropped_img2 = self.img2_8bit
-        mean_val = cropped_img2.mean()
-        brightened_cropped_img2 = cropped_img2 * self.brightness_factor2 + (1 - self.brightness_factor2) * mean_val
-        brightened_cropped_img2 = np.clip(brightened_cropped_img2, 0, 255).astype(np.float32)
-        self.cropped_images[self.panels[1]] = (brightened_cropped_img2, (0, 0))
+            cropped_img2 = self.img2_8bit
+            mean_val = cropped_img2.mean()
+            brightened_cropped_img2 = cropped_img2 * self.brightness_factor2 + (1 - self.brightness_factor2) * mean_val
+            brightened_cropped_img2 = np.clip(brightened_cropped_img2, 0, 255).astype(np.float32)
+            self.cropped_images[self.panels[1]] = (brightened_cropped_img2, (0, 0))
 
         self.root.quit() 
         self.root.destroy()
