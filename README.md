@@ -42,6 +42,13 @@ source IntegrAlign_env/bin/activate
 pip install .
 ```
 
+## Example dataset
+
+You can download a simple dataset containing 2 serial slides here:
+https://zenodo.org/records/16572078
+
+Please note that this dataset does not include .annotation files. As a result, the tool cannot distinguish mismatched regions across slides (e.g., areas analyzed in one slide but empty in the other due to missing tissue), which limits the integration accuracy.
+
 ## Quick start
 
 ### 0 Inputs
