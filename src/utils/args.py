@@ -11,7 +11,7 @@ def parse_arguments():
     preprocess_parser.add_argument('--scans', nargs='+', required=True,
                                     help="Paths to 2 or 3 panel folders of the scans (.qptiff). Should be ordered with the reference panel in the middle for 3 panels or on the right for 2 panels.")
     preprocess_parser.add_argument('--annotations', nargs='+', default=None,
-                                    help="Paths to 2 or 3 panel folders of the annotation files (.geojson). Keep the same order used in the visualize step.")
+                                    help="Paths to 2 or 3 panel folders of the annotation files (.annotation or .geojson). Keep the same order used in the visualize step.")
     preprocess_parser.add_argument('--panels', nargs='+', required=True,
                                     help="List of the panel names. Keep the same order as folders.")
     preprocess_parser.add_argument('--output', required=True, help="Path to save the preprocessing report")
@@ -49,7 +49,6 @@ def parse_arguments():
     finetuning_parser = subparsers.add_parser("finetuning", help="Validate the data for a specific patient")
     finetuning_parser.add_argument('--id', required=True, help="Patient ID")
     finetuning_parser.add_argument('--meshsize', type=int, nargs='+', required=True, help="Mesh size of each alignment. \nExemple : 6 8  will align the first panel to the middle panel using mesh size of 6 and align the last panel to the middle panel using mesh size of 8")
-    # finetuning_parser.add_argument('--alignment', required=True, help="Name of the alignment using panel names. \nExemple : \"T_DC\" will transform coordinates from the panel T to the panel DC. \nThis have to be the same as the ones given at the first step visualization). ")
     finetuning_parser.add_argument('--dwnscimg', required=True,
                                     help="Paths to the downscaled images file (.pkl)")
     finetuning_parser.add_argument('--tables', nargs='+', required=True,
@@ -70,17 +69,6 @@ def parse_arguments():
                                     help="Transparency of the reference panel in red for visualization of the alignment (optional). Value by default : 0.4")
 
     return parser.parse_args()
-
-'''
-def validate_folder(folder_paths):
-    """Validate folder structure."""
-
-    for folder in folder_paths:
-        scans_path = os.path.join(folder, "SCANS")
-        annotations_path = os.path.join(folder, "Annotations")
-        if not os.path.isdir(scans_path) or not os.path.isdir(annotations_path):
-            raise FileNotFoundError(f"Required subfolders missing in {folder}: SCANS/, Annotations/")
-'''
 
 
 def validate_nb_panels(value):

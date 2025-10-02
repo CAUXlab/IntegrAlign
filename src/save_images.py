@@ -39,7 +39,7 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor, HA
     unique_name_alignments = set()
     root = tk.Tk()
     for id in tqdm(common_ids, desc="Loading downscaled images", unit="Patient"):
-        data_dict[id] = {}  # Initialize sub-dictionary for this patient
+        data_dict[id] = {}
         for name_alignment, scans_alignment_paths in panel_alignment_dict.items():
             panels = name_alignment.split('_')
             # Add the name_alignment to the set (sets automatically handle uniqueness)
@@ -59,7 +59,6 @@ def save_downscaled_images(params_file_path, excluded_ids, brightness_factor, HA
                     # Get annotations
                     artefacts_empty_alignment = {}
                     analysis_area_alignment = {}
-                    # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
                     annotation_file_path = next(
                         (os.path.join(annotations, f) for f in os.listdir(annotations) 
                         if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
@@ -310,6 +309,7 @@ def load_downscaled_imgs(folder_path1, folder_path2, id):
     # print("path1:", path1)
     # print("path2:", path2)
 
+    '''
     if path1.endswith('.qptiff') and path2.endswith('.qptiff'):
         ## Load images
         channels1, img1_resize, sizeY_compressed1, sizeY_fullres1 = get_data_alignment_qptiff(path1)
@@ -318,6 +318,21 @@ def load_downscaled_imgs(folder_path1, folder_path2, id):
     elif path1.endswith('.tif') and path2.endswith('.tif'):
         channels1, img1_resize, sizeY_compressed1, sizeY_fullres1 = get_data_alignment_tif(path1)
         channels2, img2_resize, sizeY_compressed2, sizeY_fullres2 = get_data_alignment_tif(path2)
+    '''
+    # Read files whether it is qptiff or tif
+    ext_to_loader = {
+        ".qptiff": get_data_alignment_qptiff,
+        ".tif": get_data_alignment_tif,
+    }
+    def get_loader(path: str):
+        for ext, loader in ext_to_loader.items():
+            if path.lower().endswith(ext):
+                return loader
+        raise ValueError(f"Unsupported file type: {path}")
+    loader1 = get_loader(path1)
+    loader2 = get_loader(path2)
+    channels1, img1_resize, sizeY_compressed1, sizeY_fullres1 = loader1(path1)
+    channels2, img2_resize, sizeY_compressed2, sizeY_fullres2 = loader2(path2)
 
     scale_percent1 = sizeY_compressed1/sizeY_fullres1
     scale_percent2 = sizeY_compressed2/sizeY_fullres2
@@ -448,7 +463,6 @@ def getLabels(tif_tags):
                 wl.append(s[5:])
                 
         dictionary = {key: value for key, value in enumerate(wl)}
-        # change to detailled list
         channel_list = [f'{value} (channel {key})' for key, value in enumerate(marquages)]
     else:
         dictionary = {'DAPI': '450'}
@@ -510,43 +524,6 @@ def get_same_compression(id, path1, img1_resize, scale_percent1, sizeY_fullres1,
             print(f"img2: 1/{comp_lvl2}ème")
     
     return img1_resize, scale_percent1, img2_resize, scale_percent2
-'''
-def get_same_compression(path1, img1_resize, scale_percent1, sizeY1, path2, img2_resize, scale_percent2, sizeY2):
-    # print("Compression")
-    comp_lvl1 = round((1/scale_percent1))
-    comp_lvl2 = round((1/scale_percent2))
-    # print(f"img1: 1/{comp_lvl1}ème")
-    # print(f"img2: 1/{comp_lvl2}ème")
-    print(sizeY1)
-    print(sizeY2)
-    # Check if both images are the same size
-    if comp_lvl2 < comp_lvl1:
-        index_comp = -1
-        print(f"Patient {id}: Not same compression level")
-        tif = TiffFile(path1)
-        while comp_lvl2 < comp_lvl1:
-            index_comp-=1
-            img1_resize = tif.series[0].levels[index_comp].asarray()[0]
-            scale_percent1 = int(sizeY1[index_comp]) / int(sizeY1[0])
-            comp_lvl1 = round((1/scale_percent1))
-            print("Finding the correct compression")
-            print(f"img1: 1/{comp_lvl1}ème")
-            print(f"img2: 1/{comp_lvl2}ème")
-    if comp_lvl1 < comp_lvl2:
-        index_comp = -1
-        print(f"Patient {id}: Not same compression level")
-        tif = TiffFile(path2)
-        while comp_lvl1 < comp_lvl2:
-            index_comp-=1
-            img2_resize = tif.series[0].levels[index_comp].asarray()[0]
-            scale_percent2 = int(sizeY2[index_comp]) / int(sizeY2[0])
-            comp_lvl2 = round((1/scale_percent2))
-            print("Finding the correct compression")
-            print(f"img1: 1/{comp_lvl1}ème")
-            print(f"img2: 1/{comp_lvl2}ème")
-    
-    return img1_resize, scale_percent1, img2_resize, scale_percent2
-'''
 
 
 def get_polygon(gdf, scale_percent, image_shape, img_resize = None, c = "R"):
@@ -566,10 +543,7 @@ def get_polygon(gdf, scale_percent, image_shape, img_resize = None, c = "R"):
     polygons = []
     for array in annotation:
         scaled_points = array*scale_percent
-        # Convert array to list of tuples
         points = [(x, y) for x, y in scaled_points]
-        
-        # Create Polygon object
         polygons.append(Polygon(points))
 
     return polygons
@@ -584,7 +558,7 @@ def shift_annotations(annotations, crop_coords):
     - annotations (list): A list where the second element is a list of polygons.
     - crop_coords (tuple): The (x, y) shift to be applied to the polygons.
     """
-    shift_x, shift_y = crop_coords  # Extract the shift values
+    shift_x, shift_y = crop_coords
     shifted_polygons = []
 
     # Iterate through each polygon in annotations

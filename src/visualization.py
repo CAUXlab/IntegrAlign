@@ -30,7 +30,6 @@ def visualization(scans_paths, annotations, panels, output_path):
 
     ## Sort the common ids between the panels
     common_ids = set.intersection(*map(set, ids_panels))
-    # sorted_common_ids = sorted(common_ids, key=lambda x: int(x))
     sorted_common_ids = sorted(common_ids, key=lambda x: (x.isdigit(), int(x) if x.isdigit() else x))
     print(f"There is {len(sorted_common_ids)} patients that are common in every panel")
 
@@ -173,7 +172,6 @@ def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_em
                 # Get annotations
                 artefacts_empty_alignment = {}
                 analysis_area_alignment = {}
-                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
                 annotation_file_path = next(
                     (os.path.join(annotations, f) for f in os.listdir(annotations) 
                     if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
@@ -188,9 +186,9 @@ def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_em
         ## Plot the compressed images
         fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
         for i, (img_resized, panel, annotations) in enumerate(zip(imgs_resized, panels, annotations_resized)):
-            axes[i].imshow(img_resized, cmap="gray")  # Display the image
-            axes[i].set_title(panel, fontsize=6)  # Set panel title
-            axes[i].axis('off')  # Turn off axes
+            axes[i].imshow(img_resized, cmap="gray") 
+            axes[i].set_title(panel, fontsize=6)  
+            axes[i].axis('off') 
             if annotations_paths:
                 # Plot the annotations
                 for annotation_array in annotations:
@@ -209,7 +207,7 @@ def plot_panels(scans_paths, annotations_paths, id, panels, annotations_names_em
             img_resized = cv2.convertScaleAbs(img_resized)
 
             imgs_resized.append(img_resized)
-            ## Plot the compressed images
+        ## Plot the compressed images
         fig, axes = plt.subplots(1, len(panels), figsize=(10, 3))
         for i, (img_resized, panel) in enumerate(zip(imgs_resized, panels)):
             axes[i].imshow(img_resized, cmap="gray")
@@ -242,8 +240,6 @@ def save_html_report(figs, ids, output_html="report.html"):
         html_content += f"<img src='data:image/png;base64,{img_base64}'><br>"
 
     html_content += "</body></html>"
-
-    # Write to file
     with open(output_html, "w") as f:
         f.write(html_content)
 

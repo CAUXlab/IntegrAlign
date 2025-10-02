@@ -69,11 +69,8 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
     manual_empty_alignment = {}
     scans_alignment_dict = panels_name_alignment(panels_all, scans_path)
 
-    # iterate over the alignment with the downscaled images and the files to the full resolution .qptiff files for the corresponding alignment
+    # Iterate over the alignment with the downscaled images and the files to the full resolution .qptiff files for the corresponding alignment
     for i_ms, ((name_alignment, scans_alignment_paths), (_, downscaled_images_id_name_alignment)) in enumerate(zip(scans_alignment_dict.items(), downscaled_images_id.items())):
-    # for name_alignment, folder_alignment_paths in panel_alignment_dict.items():
-    # for name_alignment, downscaled_images_id_name_alignment in downscaled_images_id.items():
-        # downscaled_images_id_name_alignment = downscaled_images_id[name_alignment]
         print("-----")
         ## Load downscaled images
         print("Loading downscaled images...")
@@ -100,7 +97,6 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
             cell_coordinates, data_frame_cells = get_cells_coordinates_SPIAT_CellType(csv_file_path, id, panel, cell_coordinates, data_frame_cells, resolution_micron, HALO_rotation_path, scale_percent, image_shape)
             if annotations_paths:
                 annotations = annotations_paths[index]
-                # geojson_file_path = next((os.path.join(annotations, f) for f in os.listdir(annotations) if id in f and f.endswith(".geojson") and not f.startswith(".")), None)
                 annotation_file_path = next(
                     (os.path.join(annotations, f) for f in os.listdir(annotations) 
                     if id in f and (f.endswith(".annotations") or f.endswith(".geojson")) and not f.startswith(".")), 
@@ -126,7 +122,7 @@ def finetuning(id, meshsize, downscaled_images_path, coordinate_tables, visualiz
     response = input("Are you sure you want to rewrite the file of the merged annotations with the specified mesh size for this patient's panel alignments? (Y/n): ").strip().lower()
     if response in ['no', 'n']:
         print("Exiting the script without rewriting the annotations file.")
-        sys.exit()  # Exit the script immediately
+        sys.exit()  
     inner_boundary = None
     if annotations_paths:
         ## Transform and merge the annotations
@@ -178,10 +174,10 @@ def alignment_2panels_specific_mesh_size(img1, img2, meshsize, metric, spline_or
     metric_values_dict = {}
     global metric_values_list
     metric_values_list= []
-    start_time = time.time()  # Record start time
+    start_time = time.time() 
     cimg, simg1_Rigid, simg2_Rigid, outTx_Rigid = imageRegRigid(img1,img2)
-    end_time = time.time()  # Record end time
-    execution_time = end_time - start_time  # Calculate execution time
+    end_time = time.time() 
+    execution_time = end_time - start_time  
     # print(f"Execution time for Rigid: {execution_time} seconds")
     nda_Rigid = sitk.GetArrayFromImage(cimg)
     # plt.imshow(nda)
@@ -205,10 +201,10 @@ def alignment_2panels_specific_mesh_size(img1, img2, meshsize, metric, spline_or
     img1 = sitk.Cast(img1, sitk.sitkFloat32)
     img2 = sitk.Cast(img2, sitk.sitkFloat32)
 
-    start_time = time.time()  # Record start time
+    start_time = time.time() 
     cimg, simg1, simg2, outTx_Bspline = imageRegBspline(img1, img2, transformDomainMeshSize, spline_order, metric)
-    end_time = time.time()  # Record end time
-    execution_time = end_time - start_time  # Calculate execution time
+    end_time = time.time() 
+    execution_time = end_time - start_time 
     # print(f"Execution time for deformation degree {deformation_degree}: {execution_time} seconds")
 
     execution_time_dict[f"{metric}_{meshsize}"] = execution_time
@@ -294,7 +290,7 @@ def imageRegBspline(fixed,moving,transformDomainMeshSize,spline_order,metric):
     # print(tx.GetOrder())
 
     R = sitk.ImageRegistrationMethod()
-    # correlation statistique entre les valeurs des pixels de deux images
+    # Correlation between pixel values of 2 images
     if metric == "Mutual information":
         R.SetMetricAsMattesMutualInformation()
     elif metric == "Correlation":
@@ -339,7 +335,6 @@ def imageRegBspline(fixed,moving,transformDomainMeshSize,spline_order,metric):
 def load_QPTIFF_high_res(path_scan):
     tif = TiffFile(path_scan)
     tif_tags = {tag.name: tag.value for tag in tif.pages[0].tags.values()}
-    # Parse the XML content
     xml_content = tif_tags.get("ImageDescription", "").replace("\r\n", "").replace("\t", "")
     try:
         channels = generate_channels_list(xml_content, tif_tags)
@@ -403,24 +398,25 @@ def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     path1 = "\n".join([os.path.join(folder_path1, f) for f in os.listdir(folder_path1) if not f.startswith('.') and (fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif"))])
     path2 = "\n".join([os.path.join(folder_path2, f) for f in os.listdir(folder_path2) if not f.startswith('.') and (fnmatch.fnmatch(f.lower(), f"*{id}*.qptiff") or fnmatch.fnmatch(f.lower(), f"*{id}*.tif"))])
 
-    #path1 = folder_path1 + id + f"_panel_{panels[0]}.unmixed.qptiff"
-    #path2 = folder_path2 + id + f"_panel_{panels[1]}.unmixed.qptiff"
-
-    # img1_data, tif_tags1, channel_list1, channel_name_dictionary1 = load_QPTIFF_high_res(path1)
-    # img2_data, tif_tags2, channel_list2, channel_name_dictionary2 = load_QPTIFF_high_res(path2)
-    
-    if path1.endswith('.qptiff') and path2.endswith('.qptiff'):
-        print(f"Loading .qptiff images...")
-        ## Load images
-        channels1, img1_data, sizeY_compressed1, sizeY_fullres1 = load_QPTIFF_high_res(path1)
-        channels2, img2_data, sizeY_compressed2, sizeY_fullres2 = load_QPTIFF_high_res(path2)
-        tif = False
-
-    elif path1.endswith('.tif') and path2.endswith('.tif'):
-        print(f"Loading .tif images...")
-        channels1, img1_data, sizeY_compressed1, sizeY_fullres1 = load_TIF_high_res(path1)
-        channels2, img2_data, sizeY_compressed2, sizeY_fullres2 = load_TIF_high_res(path2)
-        tif = True
+    # Read files whether it is qptiff or tif
+    ext_to_loader = {
+        ".qptiff": load_QPTIFF_high_res,
+        ".tif": load_TIF_high_res,
+    }
+    def get_loader(path: str):
+        for ext, loader in ext_to_loader.items():
+            if path.lower().endswith(ext):
+                return loader, ext
+        raise ValueError(f"Unsupported file type: {path}")
+    # Get loaders + extensions
+    loader1, ext1 = get_loader(path1)
+    loader2, ext2 = get_loader(path2)
+    # Flags
+    tif_1 = ext1 == ".tif"
+    tif_2 = ext2 == ".tif"
+    # Load data
+    channels1, img1_data, sizeY_compressed1, sizeY_fullres1 = loader1(path1)
+    channels2, img2_data, sizeY_compressed2, sizeY_fullres2 = loader2(path2)
 
     scale_percent1 = sizeY_compressed1/sizeY_fullres1
     scale_percent2 = sizeY_compressed2/sizeY_fullres2
@@ -431,13 +427,13 @@ def load_high_res_imgs(folder_path1, folder_path2, id, panels):
     np.save(dir_res + f"{id}/{folder_name_alignment}/results/img2_data_{id}_panel_{panels[0]}.npy", img2_data)
     '''
 
-    return img1_data, channels1, img2_data, channels2, tif
+    return img1_data, channels1, img2_data, channels2, tif_1, tif_2
 
 
 
 def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resize, img2_resize, name_alignment, panels_alignment, outTx_Rigid_alignment, outTx_Bspline_alignment, manual_empty_alignment, analysis_area_alignment = None, artefacts_empty_alignment = None, shapes_data_alignment=None, shapes_transformed=None, full_res=None):
     panels = name_alignment.split('_')
-    img1_data, channels1, img2_data, channels2, tif = load_high_res_imgs(scan_path1, scan_path2, id, panels)
+    img1_data, channels1, img2_data, channels2, tif_1, tif_2 = load_high_res_imgs(scan_path1, scan_path2, id, panels)
     scale_percent1 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[0]}"]
     scale_percent2 = metadata_images[name_alignment][f"scale_percent_{panels_alignment[1]}"]
     crop_coords1 = metadata_images[name_alignment][f'crop_coords_{panels_alignment[0]}']
@@ -472,7 +468,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         r = (value >> 16) & 255
         g = (value >> 8) & 255
         b = value & 255
-        return [r / 255.0, g / 255.0, b / 255.0]  # Normalize
+        return [r / 255.0, g / 255.0, b / 255.0] 
 
 
     viewer1 = napari.Viewer()
@@ -500,7 +496,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         rotated_channels = []
         print('rotating image')
         for c in range(channels):
-            rotated = rotate(img[c], angle, reshape=True, order=1)  # bilinear
+            rotated = rotate(img[c], angle, reshape=True, order=1) 
             rotated_channels.append(rotated)
 
         # Stack back into shape (C, new_H, new_W)
@@ -511,16 +507,15 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
         new_center = np.array([rotated_img.shape[1] // 2, rotated_img.shape[2] // 2])
 
         # Calculate offset to re-align rotated image center with original center
-        offset = orig_center - new_center  # (dy, dx)
+        offset = orig_center - new_center 
 
         return rotated_img, img_shape, offset
     
     img1_data, img1_data_shape, img1_data_offset = rotate_image_with_offset(img1_data, manual_alignment_rotation)
 
-    #gamma_value = 0.3 if tif else 1.0
-
-    # Set contrast limits based on whether tif is True
-    contrast_limit = [0, 50] if tif else [0, 255]
+    # Set contrast limits based on whether it is .tif file
+    contrast_limit_1 = [0, 50] if tif_1 else [0, 255]
+    contrast_limit_2 = [0, 50] if tif_2 else [0, 255]
 
     for i, channel in enumerate(channels1):
         rgb_values = int_to_rgb(channel['rgb'])
@@ -532,13 +527,13 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
                 img1_data[i][::4, ::4],
                 img1_data[i][::8, ::8]],
                 name=channel['name'],
-                contrast_limits=contrast_limit
+                contrast_limits=contrast_limit_1
             )
         else:
             rlayer = viewer1.add_image(
                 img1_data[i],
                 name=channel['name'],
-                contrast_limits=contrast_limit
+                contrast_limits=contrast_limit_1
             )
             
         rlayer.blending = 'additive'
@@ -556,13 +551,13 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
                 img2_data[i][::4, ::4],
                 img2_data[i][::8, ::8]],
                 name=channel['name'], 
-                contrast_limits=contrast_limit
+                contrast_limits=contrast_limit_2
             )
         else:
             rlayer = viewer2.add_image(
                 img2_data[i],
                 name=channel['name'], 
-                contrast_limits=contrast_limit
+                contrast_limits=contrast_limit_2
             )
             
         rlayer.blending = 'additive'
@@ -650,7 +645,7 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
                 coords = coords[:, [1, 0]]  # Invert x/y for Napari
                 if viewer_id == "viewer1":
                     orig_center = np.array([img1_data_shape[0] / 2, img1_data_shape[1] / 2])  # (y, x)
-                    new_center = orig_center - np.array(img1_data_offset)  # undo how you computed the offset
+                    new_center = orig_center - np.array(img1_data_offset) 
 
                     # Step 1: Translate to origin (center of original image)
                     coords_centered = coords - orig_center
@@ -722,233 +717,6 @@ def mirrored_cursor_visu(scan_path1, scan_path2, id, metadata_images, img1_resiz
                 name="Artefacts/ Empty area"
             )
 
-
-
-    '''
-    if analysis_area_alignment:
-
-        for idx, (geometry, scale_percent, scale_percent_napari, viewer) in enumerate([
-            (analysis_area_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
-            (analysis_area_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
-        ]):
-            all_coords = []
-            for single_polygon in geometry:
-                if single_polygon.is_empty:
-                    continue
-
-                single_polygon = single_polygon.buffer(0)
-
-                if single_polygon.geom_type == 'Polygon':
-                    polygons = [single_polygon]
-                elif single_polygon.geom_type == 'MultiPolygon':
-                    polygons = list(single_polygon.geoms)
-                else:
-                    continue
-
-                for poly in polygons:
-                    coords = (np.array(poly.exterior.coords) * scale_percent) / scale_percent_napari
-                    coords = coords[:, [1, 0]]  # invert x/y
-                    if coords.shape[0] > 2:
-                        all_coords.append(coords)
-
-            # Add all polygons at once for this viewer
-            if all_coords:
-                viewer.add_shapes(
-                    all_coords,
-                    shape_type='polygon',
-                    edge_color='green',
-                    face_color='gray',
-                    opacity=0.3,
-                    edge_width=10,
-                    name="Analysis area"
-                )
-
-    if artefacts_empty_alignment:
-
-        for idx, (geometry, scale_percent, scale_percent_napari, viewer) in enumerate([
-            (artefacts_empty_alignment[panels_alignment[0]], scale_percent1, scale_percent1_napari, viewer1),
-            (artefacts_empty_alignment[panels_alignment[1]], scale_percent2, scale_percent2_napari, viewer2),
-        ]):
-            all_coords = []
-            for single_polygon in geometry:
-                if single_polygon.is_empty:
-                    continue
-
-                single_polygon = single_polygon.buffer(0)
-
-                if single_polygon.geom_type == 'Polygon':
-                    polygons = [single_polygon]
-                elif single_polygon.geom_type == 'MultiPolygon':
-                    polygons = list(single_polygon.geoms)
-                else:
-                    continue
-
-                for poly in polygons:
-                    coords = (np.array(poly.exterior.coords) * scale_percent) / scale_percent_napari
-                    coords = coords[:, [1, 0]]  # invert x/y
-                    if coords.shape[0] > 2:
-                        all_coords.append(coords)
-
-            # Add all polygons at once for this viewer
-            if all_coords:
-                viewer.add_shapes(
-                    all_coords,
-                    shape_type='polygon',
-                    edge_color='red',
-                    face_color='red',
-                    opacity=0.5,
-                    edge_width=10,
-                    name="Artefacts/ Empty area"
-                )
-    '''
-    '''
-    if analysis_area_alignment:
-        geometry = analysis_area_alignment[panels_alignment[0]]
-        # Loop through all geometries in the GeoSeries
-        for single_polygon in geometry:
-            # Ensure it's a valid Polygon
-            if single_polygon.geom_type == 'Polygon':
-                # Extract exterior coordinates
-                single_polygon = single_polygon.buffer(0)
-                if single_polygon.geom_type == 'Polygon':
-                    # Still a Polygon after buffering
-                    coords = (np.array(single_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer1.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-                elif single_polygon.geom_type == 'MultiPolygon':
-                    # It turned into a MultiPolygon after buffering
-                    for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                        coords = (np.array(sub_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
-                        # Invert x and y coordinates (napari coordinate system)
-                        coords = coords[:, [1, 0]]
-                        # Add the sub-polygon to the viewer
-                        if coords.shape[0] > 2:
-                            viewer1.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-            
-            # Handling for MultiPolygon geometry (if not already handled)
-            elif single_polygon.geom_type == 'MultiPolygon':
-                for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                    coords = (np.array(sub_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the sub-polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer1.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-
-
-        geometry = analysis_area_alignment[panels_alignment[1]]
-        # Loop through all geometries in the GeoSeries
-        for single_polygon in geometry:
-            # Ensure it's a valid Polygon
-            if single_polygon.geom_type == 'Polygon':
-                # Extract exterior coordinates
-                single_polygon = single_polygon.buffer(0)
-                if single_polygon.geom_type == 'Polygon':
-                    # Still a Polygon after buffering
-                    coords = (np.array(single_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-                elif single_polygon.geom_type == 'MultiPolygon':
-                    # It turned into a MultiPolygon after buffering
-                    for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                        coords = (np.array(sub_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
-                        # Invert x and y coordinates (napari coordinate system)
-                        coords = coords[:, [1, 0]]
-                        # Add the sub-polygon to the viewer
-                        if coords.shape[0] > 2:
-                            viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-            
-            # Handling for MultiPolygon geometry (if not already handled)
-            elif single_polygon.geom_type == 'MultiPolygon':
-                for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                    coords = (np.array(sub_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the sub-polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer2.add_shapes([coords], shape_type='polygon', edge_color='red', face_color='gray', opacity=0.3, edge_width=10, name="Analysis area")
-    '''
-    '''
-    if artefacts_empty_alignment:
-        geometry = artefacts_empty_alignment[panels_alignment[0]]
-        # Loop through all geometries in the GeoSeries
-        for single_polygon in geometry:
-            # Ensure it's a valid Polygon
-            if single_polygon.geom_type == 'Polygon':
-                # Extract exterior coordinates
-                single_polygon = single_polygon.buffer(0)
-                if single_polygon.geom_type == 'Polygon':
-                    # Still a Polygon after buffering
-                    coords = (np.array(single_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer1.add_shapes([coords], shape_type='polygon', edge_color='white', face_color='white', opacity=0.6, edge_width=1, name="Artefacts/ Empty area")
-                elif single_polygon.geom_type == 'MultiPolygon':
-                    # It turned into a MultiPolygon after buffering
-                    for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                        coords = (np.array(sub_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
-                        # Invert x and y coordinates (napari coordinate system)
-                        coords = coords[:, [1, 0]]
-                        # Add the sub-polygon to the viewer
-                        if coords.shape[0] > 2:
-                            viewer1.add_shapes([coords], shape_type='polygon', edge_color='white', face_color='white', opacity=0.6, edge_width=1, name="Artefacts/ Empty area")
-            
-            # Handling for MultiPolygon geometry (if not already handled)
-            elif single_polygon.geom_type == 'MultiPolygon':
-                for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                    coords = (np.array(sub_polygon.exterior.coords) * scale_percent1)/scale_percent1_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the sub-polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer1.add_shapes([coords], shape_type='polygon', edge_color='white', face_color='white', opacity=0.6, edge_width=1, name="Artefacts/ Empty area")
-
-
-        geometry = artefacts_empty_alignment[panels_alignment[1]]
-        # Loop through all geometries in the GeoSeries
-        for single_polygon in geometry:
-            # Ensure it's a valid Polygon
-            if single_polygon.geom_type == 'Polygon':
-                # Extract exterior coordinates
-                single_polygon = single_polygon.buffer(0)
-                if single_polygon.geom_type == 'Polygon':
-                    # Still a Polygon after buffering
-                    coords = (np.array(single_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer2.add_shapes([coords], shape_type='polygon', edge_color='white', face_color='white', opacity=0.6, edge_width=1, name="Artefacts/ Empty area")
-                elif single_polygon.geom_type == 'MultiPolygon':
-                    # It turned into a MultiPolygon after buffering
-                    for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                        coords = (np.array(sub_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
-                        # Invert x and y coordinates (napari coordinate system)
-                        coords = coords[:, [1, 0]]
-                        # Add the sub-polygon to the viewer
-                        if coords.shape[0] > 2:
-                            viewer2.add_shapes([coords], shape_type='polygon', edge_color='white', face_color='white', opacity=0.6, edge_width=1, name="Artefacts/ Empty area")
-            
-            # Handling for MultiPolygon geometry (if not already handled)
-            elif single_polygon.geom_type == 'MultiPolygon':
-                for sub_polygon in single_polygon.geoms:  # Use .geoms to iterate over the individual polygons
-                    coords = (np.array(sub_polygon.exterior.coords) * scale_percent2)/scale_percent2_napari
-                    # Invert x and y coordinates (napari coordinate system)
-                    coords = coords[:, [1, 0]]
-                    # Add the sub-polygon to the viewer
-                    if coords.shape[0] > 2:
-                        viewer2.add_shapes([coords], shape_type='polygon', edge_color='white', face_color='white', opacity=0.6, edge_width=1, name="Artefacts/ Empty area")
-    '''
-
-
     if shapes_data_alignment:
         viewer2.add_shapes(shapes_data_alignment, shape_type='polygon')
 
@@ -1006,73 +774,6 @@ def transform_polygon_to_sitk(polygon,img1_data_offset, manual_alignment_rotatio
         print(f"An error occurred: {e}")
 
 
-
-
-"""
-This function is based on code originally written in Fortran by Dan Bruton,
-and now available here: http://www.midnightkite.com/color.html.
-There are a number of implementations floating around in various languages (Pascal, R etc.),
-often with the logic tweaked slightly.
-"""
-def wavelength_to_rgb(nm):
-
-    gamma = 0.8
-    max_intensity = 255
-    factor = 0
-
-    rgb = {"R": 0, "G": 0, "B": 0}
-
-    if 380 <= nm <= 439:
-        rgb["R"] = -(nm - 440) / (440 - 380)
-        rgb["G"] = 0.0
-        rgb["B"] = 1.0
-    elif 440 <= nm <= 489:
-        rgb["R"] = 0.0
-        rgb["G"] = (nm - 440) / (490 - 440)
-        rgb["B"] = 1.0
-    elif 490 <= nm <= 509:
-        rgb["R"] = 0.0
-        rgb["G"] = 1.0
-        rgb["B"] = -(nm - 510) / (510 - 490)
-    elif 510 <= nm <= 579:
-        rgb["R"] = (nm - 510) / (580 - 510)
-        rgb["G"] = 1.0
-        rgb["B"] = 0.0
-    elif 580 <= nm <= 644:
-        rgb["R"] = 1.0
-        rgb["G"] = -(nm - 645) / (645 - 580)
-        rgb["B"] = 0.0
-    elif 645 <= nm <= 780:
-        rgb["R"] = 1.0
-        rgb["G"] = 0.0
-        rgb["B"] = 0.0
-
-    if 380 <= nm <= 419:
-        factor = 0.3 + 0.7 * (nm - 380) / (420 - 380)
-    elif 420 <= nm <= 700:
-        factor = 1.0
-    elif 701 <= nm <= 780:
-        factor = 0.3 + 0.7 * (780 - nm) / (780 - 700)
-
-    if rgb["R"] > 0:
-        rgb["R"] = int(max_intensity * ((rgb["R"] * factor) ** gamma))
-    else:
-        rgb["R"] = 0
-
-    if rgb["G"] > 0:
-        rgb["G"] = int(max_intensity * ((rgb["G"] * factor) ** gamma))
-    else:
-        rgb["G"] = 0
-
-    if rgb["B"] > 0:
-        rgb["B"] = int(max_intensity * ((rgb["B"] * factor) ** gamma))
-    else:
-        rgb["B"] = 0
-
-    return (rgb["R"]/255, rgb["G"]/255, rgb["B"]/255)
-
-
-
 def merge_manual_empty_with_mask(manual_empty_alignment, mask, output_path, id, resolution_micron):
     panels_tr = [key for key in manual_empty_alignment.keys() if "in" in key]
     manual_empty_alignment_list = []
@@ -1109,7 +810,7 @@ def shift_tuple_coordinates(coords, crop_coords):
     """Applies the shift induced by cropping to coordinates as is done to the image."""
     x, y = coords
     shift_x, shift_y = crop_coords  
-    shifted_coords = (x - shift_x, y - shift_y)  # Return a tuple instead of an array
+    shifted_coords = (x - shift_x, y - shift_y)  
 
     return shifted_coords
 
@@ -1117,6 +818,6 @@ def shift_back_tuple_coordinates(coords, crop_coords):
     """Applies the INVERSE of the shift induced by cropping to coordinates to get back to the original image."""
     x, y = coords
     shift_x, shift_y = crop_coords  
-    shifted_coords = (x + shift_x, y + shift_y)  # Return a tuple instead of an array
+    shifted_coords = (x + shift_x, y + shift_y) 
 
     return shifted_coords

@@ -14,8 +14,8 @@ class ImageManualAlignmentApp:
         self.panels = panels
 
         # Store original images as grayscale
-        self.img1_original = Image.fromarray(img1_8bit).convert("L")  # Keep as grayscale
-        self.img2_original = Image.fromarray(img2_8bit).convert("L")  # Keep as grayscale
+        self.img1_original = Image.fromarray(img1_8bit).convert("L")  
+        self.img2_original = Image.fromarray(img2_8bit).convert("L")  
 
         ## Increase brightness manually before displaying 
         # To compensate the grayscale to RGB conversion for tkinter
@@ -127,9 +127,9 @@ class ImageManualAlignmentApp:
 
     def update_alpha(self, event=None):
         """Update transparency of img1."""
-        self.alpha = self.alpha_slider.get()  # Store alpha value
-
-        img_with_alpha = self.img1_transformed.copy()  # Apply transparency to transformed img1
+        self.alpha = self.alpha_slider.get()  
+        # Apply transparency to transformed img1
+        img_with_alpha = self.img1_transformed.copy()  
         alpha_layer = img_with_alpha.split()[3].point(lambda p: int(p * self.alpha))
         img_with_alpha.putalpha(alpha_layer)
 
@@ -244,9 +244,9 @@ class ImageManualAlignmentApp:
         # Explicitly delete canvas items (clear the canvas)
         self.canvas.delete(self.img1_canvas)
 
-        # Properly quit and destroy the Tkinter window
-        self.master.quit()  # Stop the Tkinter main loop gracefully
-        self.master.destroy()  # Destroy the window to free up resources
+        # Quit and destroy the Tkinter window
+        self.master.quit()  
+        self.master.destroy()  
 
-        # Force garbage collection (after quitting Tkinter and clearing up)
+        # Force garbage collection
         gc.collect()
